@@ -1,0 +1,75 @@
+# --- Wails build outputs (§11.3) ---
+build/bin/
+frontend/dist/
+
+# --- Frontend (Vite + React) ---
+frontend/node_modules/
+node_modules/
+frontend/package.json.md5
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Go ---
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+/bin/
+
+# --- Environment & secrets (§11.3 — never commit credentials) ---
+.env
+.env.*
+!.env.example
+*.p12
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
+
+# --- Local SQLite (§5.1 — non-secret app data, dev copies only) ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- Firmware cache & binaries (§7.2, §10) ---
+firmware-cache/
+*.bin
+
+# --- Release packaging (§11.2) ---
+*.dmg
+*.zip
+dist/
+release/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# --- Editors / IDE ---
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# --- Misc tooling ---
+.task/
+tmp/
+temp/
