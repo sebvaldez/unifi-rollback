@@ -10,8 +10,32 @@ export function DatabaseReady() {
   return window['go']['main']['App']['DatabaseReady']();
 }
 
+export function DevKeychainDelete(arg1) {
+  return window['go']['main']['App']['DevKeychainDelete'](arg1);
+}
+
+export function DevKeychainList() {
+  return window['go']['main']['App']['DevKeychainList']();
+}
+
+export function DevKeychainSave(arg1, arg2) {
+  return window['go']['main']['App']['DevKeychainSave'](arg1, arg2);
+}
+
+export function DevKeychainVerify(arg1) {
+  return window['go']['main']['App']['DevKeychainVerify'](arg1);
+}
+
+export function DevKeychainWipeAll() {
+  return window['go']['main']['App']['DevKeychainWipeAll']();
+}
+
 export function GetDeviceSettings() {
   return window['go']['main']['App']['GetDeviceSettings']();
+}
+
+export function IsDevMode() {
+  return window['go']['main']['App']['IsDevMode']();
 }
 
 export function SaveDeviceSettings(arg1) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"unifi-rollback/internal/secrets"
 	"unifi-rollback/internal/settings"
 	"unifi-rollback/internal/store"
 	"unifi-rollback/internal/store/sqlc"
@@ -11,8 +12,9 @@ import (
 
 // App struct
 type App struct {
-	ctx   context.Context
-	store *store.Store
+	ctx      context.Context
+	store    *store.Store
+	keychain *secrets.Store
 }
 
 // NewApp creates a new App application struct
@@ -24,6 +26,7 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.keychain = secrets.NewStore()
 
 	s, err := store.OpenDefault()
 	if err != nil {

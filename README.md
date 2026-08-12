@@ -24,6 +24,7 @@ unifi-rollback/
 ├── internal/               # Private backend packages (not importable outside this module)
 │   ├── unifi/              # UniFi Site Manager + Network Integration API clients
 │   ├── firmware/           # Firmware manifest, download, domain allowlist, SHA256
+│   ├── secrets/            # macOS Keychain CRUD (§5.2)
 │   └── store/              # SQLite persistence (devices, manifest, action log)
 │
 ├── frontend/               # Vite + React + TypeScript UI
@@ -56,10 +57,10 @@ added here as they are implemented.
 |---|---|
 | `internal/unifi` | HTTP clients for `api.ui.com` (Site Manager) and per-site Network Integration APIs. Device inventory and firmware version reads. |
 | `internal/firmware` | Curated firmware manifest CRUD, download validation, domain allowlisting (`dl.ui.com`, `fw-download.ubnt.com`), and SHA256 verification. |
+| `internal/secrets` | macOS Keychain wrapper (`go-keychain`). Service `com.wails.unifi-rollback`. Secrets never touch SQLite. |
 | `internal/store` | SQLite via Goose migrations + sqlc queries. Schema in `schema.sql`; DB at `~/Library/Application Support/unifi-rollback/`. |
 
-Future packages (`secrets`, `ssh`, `llm`, etc.) will live here as well — see
-SPEC.md §4 and §12.
+Future packages (`ssh`, `llm`, etc.) will live here as well — see SPEC.md §4 and §12.
 
 ### `frontend/`
 
@@ -90,6 +91,12 @@ wails dev
 
 While `wails dev` is running, the frontend is also reachable at
 http://localhost:34115 for browser-based debugging.
+
+**Keychain dev tools** (Settings → visible only in `wails dev`): add test
+credentials, list account names, delete, or wipe the app namespace. Production
+builds hide this panel. Destructive actions use an in-app typed confirm
+(`DELETE`). If list/delete fail after a rebuild, remove stale entries in
+Keychain Access (login keychain) or restart `wails dev`.
 
 **Frontend only** (from `frontend/`):
 

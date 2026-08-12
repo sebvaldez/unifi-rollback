@@ -1,3 +1,20 @@
+export namespace main {
+	
+	export class CredentialEntry {
+	    account: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CredentialEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.account = source["account"];
+	    }
+	}
+
+}
+
 export namespace settings {
 	
 	export class DeviceSettings {
