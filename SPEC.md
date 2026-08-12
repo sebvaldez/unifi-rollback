@@ -127,6 +127,15 @@ CREATE TABLE preferences (
     updated_at      DATETIME
 );
 
+Known preference keys:
+
+| key | type | default | description |
+|---|---|---|---|
+| `firmware_cache_dir` | string | `~/Library/Application Support/<app>/firmware-cache` | Local firmware binary cache (deferred) |
+| `device_refresh_mode` | `manual` \| `poll` | `manual` | How device inventory is refreshed |
+| `device_poll_interval_seconds` | int | `60` | Poll interval when mode is `poll` (min 15) |
+| `device_refresh_on_startup` | bool | `false` | Refresh once when the app opens |
+
 -- metadata only — no secret material ever stored here
 CREATE TABLE credentials_meta (
     key_type          TEXT PRIMARY KEY, -- 'site_manager' | 'network_local' | 'claude' | 'openai' | 'device_ssh:<mac>'
@@ -177,8 +186,11 @@ package as `Save`, `Get`, `Delete`, `List` wrapping Add/QueryItem/Update/DeleteI
 - [ ] Onboarding: user pastes Site Manager key → validate with a live
       `GET /sites` call → store in Keychain → write `credentials_meta` row.
 - [ ] Repeat for local Network API key(s), one per site/controller.
-- [ ] Periodic (user-triggered, not background-scheduled) inventory refresh
-      writes into `devices` table.
+- [ ] Inventory refresh writes into `devices` table. Manual refresh (status
+      indicator click) or opt-in polling while the app is open — not unattended
+      background scheduling. Preferences: `device_refresh_mode`,
+      `device_poll_interval_seconds`, `device_refresh_on_startup` (§5.1).
+      *Current branch: refresh UI + preferences only; UniFi API client deferred.*
 
 **No firmware-push action exists in the official API** (confirmed — neither
 surface exposes a documented "install this version" or downgrade action).
@@ -319,8 +331,9 @@ attaches `.dmg`/`.zip` to a GitHub Release automatically.
 
 ## 12. Implementation Checklist (rollup)
 
-- [ ] Scaffold Wails project (`wails init`), Go module layout per §4.
-- [ ] SQLite migrations for schema in §5.1.
+- [x] Scaffold Wails project (`wails init`), Go module layout per §4.
+- [x] SQLite migrations for schema in §5.1.
+- [x] Device refresh preferences (manual / poll, interval, startup) in Settings.
 - [ ] `secrets/` package wrapping go-keychain CRUD.
 - [ ] Onboarding UI: collect + validate Site Manager key, Network key(s),
       optional Claude/OpenAI keys.

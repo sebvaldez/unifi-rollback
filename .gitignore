@@ -5,6 +5,7 @@ frontend/dist/
 # --- Frontend (Vite + React) ---
 frontend/node_modules/
 node_modules/
+frontend/package.json.md5
 .vite/
 *.log
 npm-debug.log*
