@@ -50,3 +50,9 @@ CREATE TABLE action_log (
     result          TEXT,
     error_detail    TEXT
 );
+
+CREATE TABLE preferences (
+    key             TEXT PRIMARY KEY,
+    value           TEXT NOT NULL,
+    updated_at      DATETIME
+);

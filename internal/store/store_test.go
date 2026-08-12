@@ -2,8 +2,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
+
+	"unifi-rollback/internal/store/sqlc"
 )
 
 func TestOpenRunsMigrations(t *testing.T) {
@@ -34,5 +37,21 @@ func TestOpenRunsMigrations(t *testing.T) {
 	}
 	if len(creds) != 0 {
 		t.Fatalf("ListCredentialsMeta() len = %d, want 0", len(creds))
+	}
+
+	if err := s.Queries().UpsertPreference(ctx, sqlc.UpsertPreferenceParams{
+		Key:       "firmware_cache_dir",
+		Value:     "/tmp/firmware-cache",
+		UpdatedAt: sql.NullTime{},
+	}); err != nil {
+		t.Fatalf("UpsertPreference() error = %v", err)
+	}
+
+	pref, err := s.Queries().GetPreference(ctx, "firmware_cache_dir")
+	if err != nil {
+		t.Fatalf("GetPreference() error = %v", err)
+	}
+	if pref.Value != "/tmp/firmware-cache" {
+		t.Fatalf("GetPreference() value = %q, want /tmp/firmware-cache", pref.Value)
 	}
 }

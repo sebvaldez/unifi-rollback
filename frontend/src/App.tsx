@@ -1,5 +1,8 @@
-import { AppShell, RefreshCw } from "@/components/layout/app-shell"
+import { AppShell } from "@/components/layout/app-shell"
 import { ThemePreferencePicker } from "@/components/settings/theme-preference-picker"
+import { DeviceSettingsCard } from "@/components/settings/device-settings-card"
+import { InventoryStatusIndicator } from "@/components/devices/inventory-status-indicator"
+import { useDeviceInventoryPoll } from "@/hooks/use-device-inventory-poll"
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,8 +22,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useState } from "react"
-import { Greet } from "../wailsjs/go/main/App"
+import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
+import { DatabasePath, DatabaseReady } from "../wailsjs/go/main/App"
 
 const placeholderDevices = [
   {
@@ -46,9 +50,18 @@ const placeholderDevices = [
   },
 ]
 
-function DevicesView() {
+type DevicesViewProps = {
+  isRefreshing: boolean
+}
+
+function DevicesView({ isRefreshing }: DevicesViewProps) {
   return (
-    <Card className="border-[var(--unifi-border)] shadow-sm">
+    <Card
+      className={cn(
+        "border-[var(--unifi-border)] shadow-sm transition-opacity duration-300",
+        isRefreshing && "inventory-card-refreshing opacity-95"
+      )}
+    >
       <CardHeader className="border-b border-[var(--unifi-border)] pb-4">
         <CardTitle className="text-base">Device inventory</CardTitle>
         <CardDescription>
@@ -132,14 +145,13 @@ function FirmwareView() {
 
 function SettingsView() {
   const { preference, resolvedTheme } = useTheme()
-  const [name, setName] = useState("")
-  const [message, setMessage] = useState(
-    "Wails bridge is connected. Enter a name to test the Go backend."
-  )
+  const [dbReady, setDbReady] = useState<boolean | null>(null)
+  const [dbPath, setDbPath] = useState("")
 
-  function testBackend() {
-    Greet(name || "UniFi").then(setMessage)
-  }
+  useEffect(() => {
+    DatabaseReady().then(setDbReady)
+    DatabasePath().then(setDbPath)
+  }, [])
 
   return (
     <div className="grid max-w-2xl gap-4">
@@ -186,69 +198,87 @@ function SettingsView() {
         </CardContent>
       </Card>
 
+      <DeviceSettingsCard />
+
       <Card className="border-[var(--unifi-border)] shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Backend smoke test</CardTitle>
+          <CardTitle className="text-base">Database</CardTitle>
           <CardDescription>
-            Temporary Wails binding check until real settings are wired up.
+            Local SQLite store opened on app startup.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-          />
-          <Button variant="outline" onClick={testBackend}>
-            Test Go binding
-          </Button>
-          <p className="text-sm text-[var(--unifi-text-muted)]">{message}</p>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-[var(--unifi-text)]">
+              Status
+            </span>
+            {dbReady === null ? (
+              <Badge variant="outline">Checking…</Badge>
+            ) : dbReady ? (
+              <Badge
+                variant="outline"
+                className="border-[color-mix(in_srgb,var(--unifi-success)_35%,var(--unifi-surface))] bg-[color-mix(in_srgb,var(--unifi-success)_12%,var(--unifi-surface))] text-[var(--unifi-success)]"
+              >
+                Ready
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="border-[var(--unifi-border)] text-[var(--unifi-text-muted)]"
+              >
+                Unavailable
+              </Badge>
+            )}
+          </div>
+          {dbPath ? (
+            <p className="break-all text-sm text-[var(--unifi-text-muted)]">
+              {dbPath}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </div>
   )
 }
 
-const views = {
-  devices: {
-    title: "Devices",
-    description: "Inventory across all accessible UniFi sites",
-    content: <DevicesView />,
-  },
-  firmware: {
-    title: "Firmware",
-    description: "Curated manifest and checksum-verified builds",
-    content: <FirmwareView />,
-  },
-  settings: {
-    title: "Settings",
-    description: "API keys and application preferences",
-    content: <SettingsView />,
-  },
-} as const
-
-type ViewId = keyof typeof views
+type ViewId = "devices" | "firmware" | "settings"
 
 function App() {
   const [activeNav, setActiveNav] = useState<ViewId>("devices")
-  const view = views[activeNav]
+  const devicesPoll = useDeviceInventoryPoll(activeNav === "devices")
+
+  const header = {
+    devices: {
+      title: "Devices",
+      description: "Inventory across all accessible UniFi sites",
+    },
+    firmware: {
+      title: "Firmware",
+      description: "Curated manifest and checksum-verified builds",
+    },
+    settings: {
+      title: "Settings",
+      description: "API keys and application preferences",
+    },
+  }[activeNav]
 
   return (
     <AppShell
       activeNav={activeNav}
       onNavChange={(id) => setActiveNav(id as ViewId)}
-      title={view.title}
-      description={view.description}
+      title={header.title}
+      description={header.description}
       actions={
         activeNav === "devices" ? (
-          <Button variant="outline" size="sm">
-            <RefreshCw className="size-4" />
-            Refresh inventory
-          </Button>
+          <InventoryStatusIndicator poll={devicesPoll} />
         ) : undefined
       }
     >
-      {view.content}
+      {activeNav === "devices" ? (
+        <DevicesView isRefreshing={devicesPoll.isRefreshing} />
+      ) : null}
+      {activeNav === "firmware" ? <FirmwareView /> : null}
+      {activeNav === "settings" ? <SettingsView /> : null}
     </AppShell>
   )
 }

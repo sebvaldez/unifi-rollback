@@ -10,6 +10,10 @@ export function DatabaseReady() {
   return window['go']['main']['App']['DatabaseReady']();
 }
 
-export function Greet(arg1) {
-  return window['go']['main']['App']['Greet'](arg1);
+export function GetDeviceSettings() {
+  return window['go']['main']['App']['GetDeviceSettings']();
+}
+
+export function SaveDeviceSettings(arg1) {
+  return window['go']['main']['App']['SaveDeviceSettings'](arg1);
 }

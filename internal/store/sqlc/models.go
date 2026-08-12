@@ -57,3 +57,9 @@ type FirmwareManifest struct {
 	Verified  sql.NullBool   `json:"verified"`
 	Notes     sql.NullString `json:"notes"`
 }
+
+type Preference struct {
+	Key       string       `json:"key"`
+	Value     string       `json:"value"`
+	UpdatedAt sql.NullTime `json:"updated_at"`
+}

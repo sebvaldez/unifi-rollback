@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
+	"unifi-rollback/internal/settings"
 	"unifi-rollback/internal/store"
+	"unifi-rollback/internal/store/sqlc"
 )
 
 // App struct
@@ -39,11 +41,6 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
-}
-
 // DatabasePath returns the path to the local SQLite database file.
 func (a *App) DatabasePath() string {
 	if a.store == nil {
@@ -58,4 +55,22 @@ func (a *App) DatabaseReady() bool {
 		return false
 	}
 	return a.store.Ping() == nil
+}
+
+// GetDeviceSettings returns persisted device inventory refresh preferences.
+func (a *App) GetDeviceSettings() (settings.DeviceSettings, error) {
+	if a.store == nil {
+		return settings.DeviceSettings{}, errors.New("database not available")
+	}
+	return settings.LoadDeviceSettings(a.ctx, a.store.Queries())
+}
+
+// SaveDeviceSettings validates and persists device inventory refresh preferences.
+func (a *App) SaveDeviceSettings(s settings.DeviceSettings) error {
+	if a.store == nil {
+		return errors.New("database not available")
+	}
+	return a.store.WithTx(func(q *sqlc.Queries) error {
+		return settings.SaveDeviceSettings(a.ctx, q, s)
+	})
 }
