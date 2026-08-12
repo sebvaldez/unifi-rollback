@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/layout/app-shell"
 import { ThemePreferencePicker } from "@/components/settings/theme-preference-picker"
 import { DeviceSettingsCard } from "@/components/settings/device-settings-card"
+import { KeychainDevToolsCard } from "@/components/settings/keychain-dev-tools-card"
 import { InventoryStatusIndicator } from "@/components/devices/inventory-status-indicator"
 import { useDeviceInventoryPoll } from "@/hooks/use-device-inventory-poll"
 import { useTheme } from "@/components/theme-provider"
@@ -199,6 +200,8 @@ function SettingsView() {
       </Card>
 
       <DeviceSettingsCard />
+
+      <KeychainDevToolsCard />
 
       <Card className="border-[var(--unifi-border)] shadow-sm">
         <CardHeader>
