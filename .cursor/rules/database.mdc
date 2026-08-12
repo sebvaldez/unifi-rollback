@@ -1,0 +1,61 @@
+---
+description: Database conventions for Goose migrations and sqlc queries
+globs: internal/store/**
+alwaysApply: false
+---
+
+# Database layer (Goose + sqlc + SQLite)
+
+## Stack
+
+- **SQLite** via `modernc.org/sqlite` (cgo-free)
+- **Goose** for migrations in `internal/store/migrations/`
+- **sqlc** for typed queries in `internal/store/queries/`
+- **Never** store secrets in SQLite — Keychain only (see SPEC §5.2)
+
+## Migration naming (Rails-style)
+
+```
+YYYYMMDDHHMMSS_<verb>_<subject>.sql
+```
+
+Examples:
+
+- `20260811210000_create_table_devices.sql`
+- `20260811213000_add_idx_devices_site_id.sql`
+- `20260811214000_add_column_devices_last_seen.sql`
+
+Every migration must include `-- +goose Up` and `-- +goose Down` sections.
+
+Generate a new migration:
+
+```bash
+cd internal/store
+goose -dir migrations create add_idx_example sql
+# rename output to timestamped Rails-style name if needed
+```
+
+## After changing schema
+
+1. Add or edit a Goose migration
+2. Update `internal/store/schema.sql` to match the **current** full schema
+3. Add or edit sqlc queries in `internal/store/queries/`
+4. Regenerate sqlc:
+
+```bash
+cd internal/store
+go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0 generate
+```
+
+## Generated code
+
+- sqlc output lives in `internal/store/sqlc/` — **do not edit by hand**
+- Application code uses `store.Store` (`store.go`) which embeds migrations and exposes `Queries()`
+
+## Query naming
+
+Use sqlc names like `ListDevices`, `UpsertDevice`, `GetCredentialMeta`.
+
+## Default DB location
+
+`~/Library/Application Support/unifi-rollback/unifi-rollback.db`

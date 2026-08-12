@@ -56,7 +56,7 @@ added here as they are implemented.
 |---|---|
 | `internal/unifi` | HTTP clients for `api.ui.com` (Site Manager) and per-site Network Integration APIs. Device inventory and firmware version reads. |
 | `internal/firmware` | Curated firmware manifest CRUD, download validation, domain allowlisting (`dl.ui.com`, `fw-download.ubnt.com`), and SHA256 verification. |
-| `internal/store` | SQLite schema, migrations, and queries for devices, firmware manifest entries, community analysis cache, and rollback action logs. |
+| `internal/store` | SQLite via Goose migrations + sqlc queries. Schema in `schema.sql`; DB at `~/Library/Application Support/unifi-rollback/`. |
 
 Future packages (`secrets`, `ssh`, `llm`, etc.) will live here as well — see
 SPEC.md §4 and §12.
