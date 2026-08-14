@@ -25,7 +25,14 @@ import {
   syncCredentialSiteSlots,
   validateCredential as validateCredentialRpc,
 } from "@/lib/wails-client"
-import type { CredentialSlot, SaveCredentialRequest } from "@/types/credentials"
+import { CREDENTIAL_VALIDATION_PROGRESS_EVENT } from "@/lib/credential-validation-progress"
+import { formatWailsError } from "@/lib/wails-error"
+import type {
+  CredentialSlot,
+  CredentialValidationProgress,
+  SaveCredentialRequest,
+} from "@/types/credentials"
+import { EventsOn } from "wailsjs/runtime/runtime"
 
 const SITE_MANAGER_SLOT_ID = "site-manager-primary"
 
@@ -33,6 +40,10 @@ type CredentialsContextValue = {
   slots: CredentialSlot[]
   loading: boolean
   error: string | null
+  validationProgressBySlotId: Record<string, CredentialValidationProgress>
+  insightSlotId: string | null
+  openInsight: (slotId: string) => void
+  closeInsight: () => void
   reload: () => Promise<void>
   syncDiscoveredSites: (
     sites: { siteId: string; siteName: string }[]
@@ -103,6 +114,55 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
   const [slots, setSlots] = useState<CredentialSlot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [validationProgressBySlotId, setValidationProgressBySlotId] = useState<
+    Record<string, CredentialValidationProgress>
+  >({})
+  const [insightSlotId, setInsightSlotId] = useState<string | null>(null)
+
+  const openInsight = useCallback((slotId: string) => {
+    setInsightSlotId(slotId)
+  }, [])
+
+  const closeInsight = useCallback(() => {
+    setInsightSlotId((current) => {
+      if (current) {
+        setValidationProgressBySlotId((prev) => {
+          if (!(current in prev)) return prev
+          const next = { ...prev }
+          delete next[current]
+          return next
+        })
+      }
+      return null
+    })
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = EventsOn(
+      CREDENTIAL_VALIDATION_PROGRESS_EVENT,
+      (payload: CredentialValidationProgress) => {
+        if (!payload?.slotId) return
+        setValidationProgressBySlotId((prev) => {
+          if (payload.phase === "done" && payload.steps.length === 0) {
+            if (!(payload.slotId in prev)) return prev
+            const next = { ...prev }
+            delete next[payload.slotId]
+            return next
+          }
+          return { ...prev, [payload.slotId]: payload }
+        })
+      }
+    )
+    return unsubscribe
+  }, [])
+
+  const markSlotValidating = useCallback((slotId: string) => {
+    setSlots((prev) =>
+      prev.map((slot) =>
+        slot.id === slotId ? { ...slot, status: "validating" as const } : slot
+      )
+    )
+  }, [])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -132,9 +192,24 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
       try {
         const synced = await syncCredentialSiteSlots(deduped)
         const visible = applyVisibleSlots(synced)
-        setSlots((prev) =>
-          sameCredentialSlotSnapshot(prev, visible) ? prev : visible
-        )
+        setSlots((prev) => {
+          const merged = visible.map((slot) => {
+            const existing = prev.find((candidate) => candidate.id === slot.id)
+            if (existing?.status === "validating") {
+              return existing
+            }
+            return slot
+          })
+          for (const existing of prev) {
+            if (
+              existing.status === "validating" &&
+              !merged.some((slot) => slot.id === existing.id)
+            ) {
+              merged.push(existing)
+            }
+          }
+          return sameCredentialSlotSnapshot(prev, merged) ? prev : merged
+        })
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to sync site credentials"
@@ -147,43 +222,53 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
   const saveCredential = useCallback(async (request: SaveCredentialRequest) => {
     setError(null)
     undismissNetworkSlot(request.slotId)
+    markSlotValidating(request.slotId)
+    openInsight(request.slotId)
     try {
       const updated = await saveCredentialRpc(request)
       setSlots((prev) => applyVisibleSlots(upsertSlot(prev, updated)))
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to save credential"
+      const message = formatWailsError(err, "Failed to save credential")
       setError(message)
-      throw err
-    }
-  }, [])
-
-  const validateCredential = useCallback(async (slotId: string) => {
-    setError(null)
-    setSlots((prev) =>
-      prev.map((slot) =>
-        slot.id === slotId ? { ...slot, status: "validating" as const } : slot
-      )
-    )
-    try {
-      const updated = await validateCredentialRpc(slotId)
-      setSlots((prev) => applyVisibleSlots(upsertSlot(prev, updated)))
-    } catch (err) {
       setSlots((prev) =>
         prev.map((slot) =>
-          slot.id === slotId
+          slot.id === request.slotId
             ? {
                 ...slot,
                 status: "invalid" as const,
-                validationError:
-                  err instanceof Error ? err.message : "Validation failed",
+                validationError: message,
               }
             : slot
         )
       )
       throw err
     }
-  }, [])
+  }, [markSlotValidating, openInsight])
+
+  const validateCredential = useCallback(async (slotId: string) => {
+    setError(null)
+    markSlotValidating(slotId)
+    openInsight(slotId)
+    try {
+      const updated = await validateCredentialRpc(slotId)
+      setSlots((prev) => applyVisibleSlots(upsertSlot(prev, updated)))
+    } catch (err) {
+      const message = formatWailsError(err, "Validation failed")
+      setSlots((prev) =>
+        prev.map((slot) => {
+          if (slot.id !== slotId) return slot
+          return {
+            ...slot,
+            status: slot.maskedSuffix
+              ? ("configured" as const)
+              : ("invalid" as const),
+            validationError: message,
+          }
+        })
+      )
+      throw err
+    }
+  }, [markSlotValidating, openInsight])
 
   const removeCredential = useCallback(
     async (slotId: string) => {
@@ -225,6 +310,10 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
       slots,
       loading,
       error,
+      validationProgressBySlotId,
+      insightSlotId,
+      openInsight,
+      closeInsight,
       reload,
       syncDiscoveredSites,
       saveCredential,
@@ -236,6 +325,10 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
       slots,
       loading,
       error,
+      validationProgressBySlotId,
+      insightSlotId,
+      openInsight,
+      closeInsight,
       reload,
       syncDiscoveredSites,
       saveCredential,

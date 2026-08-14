@@ -69,6 +69,25 @@ export type SaveCredentialRequest = {
   label?: string
 }
 
+export type CredentialValidationStepStatus =
+  | "pending"
+  | "active"
+  | "complete"
+  | "skipped"
+  | "error"
+
+export type CredentialValidationStep = {
+  label: string
+  target?: string
+  status: CredentialValidationStepStatus
+}
+
+export type CredentialValidationProgress = {
+  slotId: string
+  phase: "running" | "done" | "error"
+  steps: CredentialValidationStep[]
+}
+
 export const CREDENTIAL_CAPABILITY_LABELS: Record<CredentialCapability, string> =
   {
     inventory: "Fleet inventory",

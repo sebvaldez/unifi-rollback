@@ -4,14 +4,15 @@ import { Input } from "@/components/ui/input"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
+import {
+  CredentialInsightSheet,
+  slotHasInsightContent,
+} from "@/components/settings/credential-insight-sheet"
 import { useCredentials } from "@/context/credentials-context"
 import { useDeviceInventory } from "@/context/device-inventory-context"
-import { ValidationSummaryPanel } from "@/components/settings/validation-summary-panel"
 import { useTypedConfirm } from "@/hooks/use-typed-confirm"
+import { formatWailsError } from "@/lib/wails-error"
 import { cn } from "@/lib/utils"
 import {
   CREDENTIAL_CAPABILITY_LABELS,
@@ -20,6 +21,7 @@ import {
   type CredentialSlot,
   type CredentialSlotKind,
 } from "@/types/credentials"
+import { ChevronRight } from "lucide-react"
 import { useState } from "react"
 
 function statusBadgeClass(status: CredentialSlot["status"]): string {
@@ -35,14 +37,16 @@ function statusBadgeClass(status: CredentialSlot["status"]): string {
   }
 }
 
-function statusLabel(status: CredentialSlot["status"]): string {
+function statusLabel(
+  status: CredentialSlot["status"],
+  isValidating: boolean
+): string {
+  if (isValidating) return "Validating…"
   switch (status) {
     case "configured":
       return "Configured"
     case "invalid":
       return "Invalid"
-    case "validating":
-      return "Validating…"
     default:
       return "Not configured"
   }
@@ -83,12 +87,18 @@ function CredentialSlotRow({
     validateCredential,
     removeCredential,
     dismissCredentialSlot,
+    validationProgressBySlotId,
+    openInsight,
   } = useCredentials()
   const { devices } = useDeviceInventory()
   const { requestConfirm, confirmDialog } = useTypedConfirm()
   const [secret, setSecret] = useState("")
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const validationProgress = validationProgressBySlotId[slot.id]
+  const isValidating =
+    slot.status === "validating" || validationProgress?.phase === "running"
+  const showInsightButton = slotHasInsightContent(slot, validationProgress)
 
   const subtitle =
     slot.boundSiteName ??
@@ -107,9 +117,7 @@ function CredentialSlotRow({
       setSecret("")
       onExpandedChange(false)
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to save credential"
-      )
+      setActionError(formatWailsError(err, "Failed to save credential"))
     } finally {
       setBusy(false)
     }
@@ -121,9 +129,7 @@ function CredentialSlotRow({
     try {
       await validateCredential(slot.id)
     } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Validation failed"
-      )
+      setActionError(formatWailsError(err, "Validation failed"))
     } finally {
       setBusy(false)
     }
@@ -187,116 +193,137 @@ function CredentialSlotRow({
     <>
       {confirmDialog}
       <div className="rounded-lg border border-[var(--unifi-border)] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm font-medium text-[var(--unifi-text)]">
-            {slot.label}
-          </p>
-          <p className="text-xs text-[var(--unifi-text-muted)]">{subtitle}</p>
-          {slot.maskedSuffix ? (
-            <p className="text-xs text-[var(--unifi-text-muted)]">
-              Key ending in {slot.maskedSuffix}
-              {slot.lastValidatedAt
-                ? ` · validated ${new Date(slot.lastValidatedAt).toLocaleString()}`
-                : null}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-medium text-[var(--unifi-text)]">
+              {slot.label}
             </p>
-          ) : null}
+            <p className="text-xs text-[var(--unifi-text-muted)]">{subtitle}</p>
+            {slot.maskedSuffix ? (
+              <p className="text-xs text-[var(--unifi-text-muted)]">
+                Key ending in {slot.maskedSuffix}
+                {slot.lastValidatedAt
+                  ? ` · validated ${new Date(slot.lastValidatedAt).toLocaleString()}`
+                  : null}
+              </p>
+            ) : null}
+          </div>
+          <Badge
+            variant="outline"
+            className={cn("shrink-0", statusBadgeClass(slot.status))}
+          >
+            {statusLabel(slot.status, isValidating)}
+          </Badge>
         </div>
-        <Badge variant="outline" className={cn("shrink-0", statusBadgeClass(slot.status))}>
-          {statusLabel(slot.status)}
-        </Badge>
-      </div>
 
-      <div className="mt-3">
-        <CapabilityChips capabilities={slot.capabilities} />
-      </div>
+        <div className="mt-3">
+          <CapabilityChips capabilities={slot.capabilities} />
+        </div>
 
-      {slot.validationSummary ? (
-        <ValidationSummaryPanel summary={slot.validationSummary} />
-      ) : null}
+        {isValidating ? (
+          <button
+            type="button"
+            className="mt-3 flex w-full items-center justify-between rounded-md border border-dashed border-[var(--unifi-border)] px-3 py-2 text-left text-xs text-[var(--unifi-text-muted)] transition-colors hover:border-[var(--unifi-accent)] hover:text-[var(--unifi-text)]"
+            onClick={() => openInsight(slot.id)}
+          >
+            <span>Validation in progress — view live steps</span>
+            <ChevronRight className="size-3.5 shrink-0" />
+          </button>
+        ) : null}
 
-      {(actionError || slot.validationError) ? (
-        <p className="mt-2 text-xs text-[var(--unifi-warning)]">
-          {actionError ?? slot.validationError}
-        </p>
-      ) : null}
+        {(actionError || slot.validationError) && !isValidating ? (
+          <p className="mt-2 text-xs text-[var(--unifi-warning)]">
+            {actionError ?? slot.validationError}
+          </p>
+        ) : null}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {slot.status === "configured" && !expanded ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => void handleValidate()}
-            >
-              Revalidate
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={() => void handleRemove()}
-            >
-              Remove
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setActionError(null)
-                onExpandedChange(!expanded)
-              }}
-            >
-              {expanded ? "Cancel" : "Add key"}
-            </Button>
-            {slot.kind === "network_integration" &&
-            slot.status === "unconfigured" &&
-            !expanded ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {slot.status === "configured" && !expanded ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy || isValidating}
+                onClick={() => void handleValidate()}
+              >
+                {isValidating ? "Validating…" : "Revalidate"}
+              </Button>
+              {showInsightButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => openInsight(slot.id)}
+                >
+                  Details
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 disabled={busy}
-                onClick={() => void handleDismiss()}
+                onClick={() => void handleRemove()}
               >
-                Dismiss
+                Remove
               </Button>
-            ) : null}
-          </>
-        )}
-      </div>
-
-      {expanded ? (
-        <div className="mt-3 space-y-2">
-          <Input
-            type="password"
-            placeholder="Paste API key"
-            value={secret}
-            disabled={busy}
-            onChange={(e) => setSecret(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleSave()
-            }}
-          />
-          <Button
-            type="button"
-            size="sm"
-            disabled={busy || !secret.trim()}
-            onClick={() => void handleSave()}
-          >
-            Save to Keychain
-          </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  setActionError(null)
+                  onExpandedChange(!expanded)
+                }}
+              >
+                {expanded ? "Cancel" : "Add key"}
+              </Button>
+              {slot.kind === "network_integration" &&
+              slot.status === "unconfigured" &&
+              !expanded ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void handleDismiss()}
+                >
+                  Dismiss
+                </Button>
+              ) : null}
+            </>
+          )}
         </div>
-      ) : null}
-    </div>
+
+        {expanded ? (
+          <div className="mt-3 space-y-2">
+            <Input
+              type="password"
+              placeholder="Paste API key"
+              value={secret}
+              disabled={busy}
+              onChange={(e) => setSecret(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleSave()
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy || isValidating || !secret.trim()}
+              onClick={() => void handleSave()}
+            >
+              {isValidating ? "Validating…" : "Save to Keychain"}
+            </Button>
+          </div>
+        ) : null}
+      </div>
     </>
   )
 }
@@ -309,7 +336,14 @@ function groupSlots(
 }
 
 export function CredentialsRegistry() {
-  const { slots, loading, error } = useCredentials()
+  const {
+    slots,
+    loading,
+    error,
+    insightSlotId,
+    closeInsight,
+    validationProgressBySlotId,
+  } = useCredentials()
   const [expandedSlotId, setExpandedSlotId] = useState<string | null>(null)
 
   const fleetSlots = groupSlots(slots, ["site_manager"])
@@ -320,87 +354,44 @@ export function CredentialsRegistry() {
     "llm_openai",
   ])
 
+  const insightSlot = insightSlotId
+    ? slots.find((slot) => slot.id === insightSlotId) ?? null
+    : null
+  const insightProgress = insightSlotId
+    ? validationProgressBySlotId[insightSlotId] ?? null
+    : null
+
   return (
-    <Card className="border-[var(--unifi-border)] shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Credentials</CardTitle>
-        <CardDescription>
-          Keys are stored in macOS Keychain. The app discovers what each key can
-          do — you never pick scopes manually.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {error ? (
-          <p className="rounded-lg border border-[color-mix(in_srgb,var(--unifi-warning)_35%,var(--unifi-surface))] bg-[color-mix(in_srgb,var(--unifi-warning)_8%,var(--unifi-surface))] px-4 py-3 text-sm text-[var(--unifi-text)]">
-            {error}
-          </p>
-        ) : null}
-        {loading ? (
-          <p className="text-sm text-[var(--unifi-text-muted)]">Loading…</p>
-        ) : (
-          <>
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-[var(--unifi-text)]">
-                Fleet access
-              </h3>
-              <p className="text-xs text-[var(--unifi-text-muted)]">
-                Site Manager API key for inventory across all sites you can access.
-              </p>
-              {fleetSlots.map((slot) => (
-                <CredentialSlotRow
-                  key={slot.id}
-                  slot={slot}
-                  expanded={expandedSlotId === slot.id}
-                  onExpandedChange={(nextExpanded) =>
-                    setExpandedSlotId(nextExpanded ? slot.id : null)
-                  }
-                />
-              ))}
-            </section>
+    <>
+      <CredentialInsightSheet
+        open={insightSlotId !== null}
+        onOpenChange={(open) => {
+          if (!open) closeInsight()
+        }}
+        slot={insightSlot}
+        progress={insightProgress}
+        errorMessage={insightSlot?.validationError ?? null}
+      />
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-[var(--unifi-text)]">
-                Device control (per site)
-              </h3>
-              <p className="text-xs text-[var(--unifi-text-muted)]">
-                Network Integration keys bound to each site — required for restart
-                and firmware verification. Rows appear after your first inventory
-                refresh discovers sites.
-              </p>
-              {siteSlots.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-[var(--unifi-border)] px-4 py-3 text-sm text-[var(--unifi-text-muted)]">
-                  No site keys yet. Configure fleet access, then refresh inventory
-                  on the Devices tab.
+      <Card className="border-[var(--unifi-border)] shadow-sm">
+        <CardContent className="space-y-6 pt-6">
+          {error ? (
+            <p className="rounded-lg border border-[color-mix(in_srgb,var(--unifi-warning)_35%,var(--unifi-surface))] bg-[color-mix(in_srgb,var(--unifi-warning)_8%,var(--unifi-surface))] px-4 py-3 text-sm text-[var(--unifi-text)]">
+              {error}
+            </p>
+          ) : null}
+          {loading ? (
+            <p className="text-sm text-[var(--unifi-text-muted)]">Loading…</p>
+          ) : (
+            <>
+              <section className="space-y-3">
+                <h3 className="text-sm font-medium text-[var(--unifi-text)]">
+                  Fleet access
+                </h3>
+                <p className="text-xs text-[var(--unifi-text-muted)]">
+                  Site Manager API key for inventory across all sites you can access.
                 </p>
-              ) : (
-                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
-                  {siteSlots.map((slot) => (
-                    <CredentialSlotRow
-                      key={slot.id}
-                      slot={slot}
-                      expanded={expandedSlotId === slot.id}
-                      onExpandedChange={(nextExpanded) =>
-                        setExpandedSlotId(nextExpanded ? slot.id : null)
-                      }
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-[var(--unifi-text)]">
-                Optional
-              </h3>
-              <p className="text-xs text-[var(--unifi-text-muted)]">
-                Classic admin for LED locate, LLM keys for the AI assistant.
-              </p>
-              {optionalSlots.length === 0 ? (
-                <p className="text-sm text-[var(--unifi-text-muted)]">
-                  Optional credential slots will appear here as features ship.
-                </p>
-              ) : (
-                optionalSlots.map((slot) => (
+                {fleetSlots.map((slot) => (
                   <CredentialSlotRow
                     key={slot.id}
                     slot={slot}
@@ -409,12 +400,67 @@ export function CredentialsRegistry() {
                       setExpandedSlotId(nextExpanded ? slot.id : null)
                     }
                   />
-                ))
-              )}
-            </section>
-          </>
-        )}
-      </CardContent>
-    </Card>
+                ))}
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-sm font-medium text-[var(--unifi-text)]">
+                  Device control (per site)
+                </h3>
+                <p className="text-xs text-[var(--unifi-text-muted)]">
+                  Network Integration keys bound to each site — required for restart
+                  and firmware verification. Rows appear after your first inventory
+                  refresh discovers sites.
+                </p>
+                {siteSlots.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-[var(--unifi-border)] px-4 py-3 text-sm text-[var(--unifi-text-muted)]">
+                    No site keys yet. Configure fleet access, then refresh inventory
+                    on the Devices tab.
+                  </p>
+                ) : (
+                  <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                    {siteSlots.map((slot) => (
+                      <CredentialSlotRow
+                        key={slot.id}
+                        slot={slot}
+                        expanded={expandedSlotId === slot.id}
+                        onExpandedChange={(nextExpanded) =>
+                          setExpandedSlotId(nextExpanded ? slot.id : null)
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-sm font-medium text-[var(--unifi-text)]">
+                  Optional
+                </h3>
+                <p className="text-xs text-[var(--unifi-text-muted)]">
+                  Classic admin for LED locate, LLM keys for the AI assistant.
+                </p>
+                {optionalSlots.length === 0 ? (
+                  <p className="text-sm text-[var(--unifi-text-muted)]">
+                    Optional credential slots will appear here as features ship.
+                  </p>
+                ) : (
+                  optionalSlots.map((slot) => (
+                    <CredentialSlotRow
+                      key={slot.id}
+                      slot={slot}
+                      expanded={expandedSlotId === slot.id}
+                      onExpandedChange={(nextExpanded) =>
+                        setExpandedSlotId(nextExpanded ? slot.id : null)
+                      }
+                    />
+                  ))
+                )}
+              </section>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </>
   )
 }
