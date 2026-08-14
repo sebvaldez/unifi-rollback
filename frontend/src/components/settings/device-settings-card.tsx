@@ -9,17 +9,9 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Hand, RefreshCw } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
-import {
-  GetDeviceSettings,
-  SaveDeviceSettings,
-} from "../../../wailsjs/go/main/App"
-import { settings as settingsModels } from "../../../wailsjs/go/models"
-import {
-  MIN_POLL_INTERVAL_SECONDS,
-} from "@/lib/device-settings"
-
-type RefreshMode = "manual" | "poll"
+import { useDeviceSettings } from "@/context/device-settings-context"
+import type { DeviceSettings, RefreshMode } from "@/types/settings"
+import { MIN_POLL_INTERVAL_SECONDS } from "@/types/settings"
 
 const refreshModeOptions: {
   value: RefreshMode
@@ -43,47 +35,22 @@ const refreshModeOptions: {
 ]
 
 export function DeviceSettingsCard() {
-  const [deviceSettings, setDeviceSettings] =
-    useState<settingsModels.DeviceSettings | null>(null)
-  const [intervalInput, setIntervalInput] = useState("60")
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const {
+    settings: deviceSettings,
+    intervalDraft: intervalInput,
+    setIntervalDraft: setIntervalInput,
+    loading,
+    saving,
+    error,
+    reload,
+    save,
+  } = useDeviceSettings()
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  async function persist(next: DeviceSettings) {
     try {
-      const loaded = await GetDeviceSettings()
-      setDeviceSettings(loaded)
-      setIntervalInput(String(loaded.pollIntervalSeconds))
-    } catch (err) {
-      setDeviceSettings(null)
-      setError(
-        err instanceof Error ? err.message : "Failed to load device settings"
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  async function persist(next: settingsModels.DeviceSettings) {
-    setSaving(true)
-    setError(null)
-    try {
-      await SaveDeviceSettings(next)
-      setDeviceSettings(next)
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save device settings"
-      )
-      await load()
-    } finally {
-      setSaving(false)
+      await save(next)
+    } catch {
+      await reload()
     }
   }
 
@@ -108,15 +75,11 @@ export function DeviceSettingsCard() {
 
     const parsed = Number.parseInt(intervalInput, 10)
     if (Number.isNaN(parsed) || parsed < MIN_POLL_INTERVAL_SECONDS) {
-      setError(
-        `Poll interval must be at least ${MIN_POLL_INTERVAL_SECONDS} seconds`
-      )
       setIntervalInput(String(deviceSettings.pollIntervalSeconds))
       return
     }
 
     if (parsed === deviceSettings.pollIntervalSeconds) {
-      setError(null)
       return
     }
 
@@ -127,6 +90,13 @@ export function DeviceSettingsCard() {
   }
 
   const pollMode = deviceSettings?.refreshMode === "poll"
+  const parsedInterval = Number.parseInt(intervalInput, 10)
+  const intervalError =
+    deviceSettings &&
+    !Number.isNaN(parsedInterval) &&
+    parsedInterval < MIN_POLL_INTERVAL_SECONDS
+      ? `Poll interval must be at least ${MIN_POLL_INTERVAL_SECONDS} seconds`
+      : null
 
   return (
     <Card className="border-[var(--unifi-border)] shadow-sm">
@@ -142,7 +112,12 @@ export function DeviceSettingsCard() {
         ) : error && !deviceSettings ? (
           <div className="space-y-3">
             <p className="text-sm text-[var(--unifi-text-muted)]">{error}</p>
-            <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void reload()}
+            >
               Retry
             </Button>
           </div>
@@ -218,6 +193,11 @@ export function DeviceSettingsCard() {
                   Apply
                 </Button>
               </div>
+              {intervalError ? (
+                <p className="text-sm text-[var(--unifi-text-muted)]">
+                  {intervalError}
+                </p>
+              ) : null}
             </div>
 
             <label className="flex cursor-pointer items-start gap-3">

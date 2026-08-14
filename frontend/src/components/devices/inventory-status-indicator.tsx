@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils"
-import { useEffect, useState } from "react"
-import type { InventoryPollState } from "@/hooks/use-device-inventory-poll"
+import { useDeviceSettings } from "@/context/device-settings-context"
+import { useTick } from "@/hooks/use-interval"
+import type { InventoryPollState } from "@/types/inventory"
 
 type InventoryStatusIndicatorProps = {
   poll: InventoryPollState
@@ -17,16 +18,12 @@ function formatRelativeTime(date: Date): string {
 }
 
 export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps) {
-  const { settings, settingsReady, isRefreshing, lastRefreshedAt, refresh } = poll
-  const [, setTick] = useState(0)
+  const { settings, loading, ready: settingsReady } = useDeviceSettings()
+  const { isRefreshing, lastRefreshedAt, refresh } = poll
+  useTick(lastRefreshedAt ? 10_000 : null)
+
   const isPollMode = settings?.refreshMode === "poll"
   const isManual = settings?.refreshMode === "manual"
-
-  useEffect(() => {
-    if (!lastRefreshedAt) return
-    const id = window.setInterval(() => setTick((t) => t + 1), 10_000)
-    return () => window.clearInterval(id)
-  }, [lastRefreshedAt])
 
   let label = "Loading…"
   if (settingsReady && settings) {
@@ -39,9 +36,11 @@ export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps
     } else {
       label = "Manual refresh"
     }
+  } else if (loading) {
+    label = "Loading…"
   }
 
-  const clickable = isManual && !isRefreshing
+  const clickable = isManual && !isRefreshing && settingsReady
 
   return (
     <button

@@ -198,6 +198,79 @@ Every item uses `AccessibleWhenUnlockedThisDeviceOnly` and `SynchronizableNo`.
   After a dev rebuild, list/delete may fail until stale entries are removed in
   Keychain Access (login keychain) or the app is restarted without rebuilding.
 
+### 5.3 Credentials — architecture & UX
+
+Users may have **multiple API keys** across Site Manager (cloud), Network
+Integration (per console/site), optional Classic admin, LLM providers, and
+device SSH. UniFi does **not** expose fine-grained OAuth-style scopes on keys;
+Integration keys inherit the creating admin's role. The app therefore uses a
+**capability-driven** model — not user-selected scopes.
+
+#### Principles
+
+1. **Credential slots, not a key vault** — each slot has a type, optional
+   site/host binding, label, validation status, and **derived capabilities**
+   (discovered by probing the API on save/revalidate).
+2. **No per-row key picker on Devices** — backend resolves
+   `purpose + siteId (+ hostId)` to the correct Keychain item.
+3. **Graceful degradation** — Site Manager alone enables fleet inventory;
+   missing per-site Network keys disable device actions with explicit reasons.
+4. **No fake scope checkboxes** — never ask the user to tick "restart" or
+   "inventory"; run validation probes instead.
+
+#### Slot types (v1)
+
+| Slot kind | Typical count | Unlocks (when validated) |
+|---|---|---|
+| `site_manager` | 1 (N in v2) | Fleet inventory, Connector Proxy |
+| `network_integration` | 1 per site/host | Device read, restart, rollback verify |
+| `classic_admin` | 0–1 per console | LED locate (Classic API gap-fill) |
+| `llm_claude` / `llm_openai` | 0–1 each | AI assistant / thread analysis |
+| `device_ssh` | 0–N per MAC | Firmware rollback push |
+
+Keychain accounts remain as in §5.2. SQLite `credentials_meta` stores
+`label`, `last_validated_at`, `masked_suffix`, and (future) serialized
+capability list per slot id.
+
+#### Validation flow (backend — follow-up)
+
+1. User pastes secret in Settings → **Save**.
+2. Backend probes the appropriate API (`GET /v1/sites`, `GET /v1/info`, etc.).
+3. On success: store in Keychain, upsert `credentials_meta`, return
+   `capabilities[]` + `status: configured`.
+4. On failure: return `status: invalid` + error message; do not store.
+
+#### Settings UI
+
+Replace the single Site Manager input with a **credential registry**:
+
+- **Fleet access** — Site Manager slot(s): status badge, capability chips,
+  Validate / Replace / Remove.
+- **Device control (per site)** — one row per discovered site missing a Network
+  Integration key; inline Add key after first inventory refresh.
+- **Optional** — Classic admin (locate), LLM keys (collapsed section).
+
+Multi Site Manager keys (v2): list with "Include in fleet view" toggle; merge
+inventories with source label — no per-device key selection.
+
+#### Devices UI
+
+- Row actions enabled/disabled from **`device.capabilities`**, not raw keys.
+- Tooltip / disabled reason explains missing capability (e.g. "Requires Network
+  API key for Lab site — configure in Settings").
+- Optional banner when inventory is partial: "N sites lack device control keys
+  — [Configure in Settings]".
+
+#### Explicit non-goals
+
+- Global "active API key" dropdown.
+- User-managed scope matrices.
+- Blocking the app when optional keys are missing.
+
+- [~] Frontend: credential registry UI + capability-driven device actions
+      (Wails stubs until `secrets/` + validation land).
+- [ ] Backend: Keychain CRUD, validation probes, capability derivation.
+
 ---
 
 ## 6. UniFi API Integration

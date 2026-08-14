@@ -237,3 +237,50 @@
   animation: inventory-shimmer 1.2s ease-in-out infinite;
   pointer-events: none;
 }
+
+@keyframes ai-sparkle {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08) rotate(8deg);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--unifi-blue) 45%, transparent));
+  }
+}
+
+.ai-assistant-sparkle {
+  animation: ai-sparkle 2.4s ease-in-out infinite;
+}
+
+.ai-assistant-button:disabled {
+  opacity: 1;
+}
+
+@keyframes ai-chat-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.ai-chat-dot {
+  animation: ai-chat-dot 1.2s ease-in-out infinite;
+}
+
+.ai-chat-dot-delay-1 {
+  animation-delay: 0.15s;
+}
+
+.ai-chat-dot-delay-2 {
+  animation-delay: 0.3s;
+}
