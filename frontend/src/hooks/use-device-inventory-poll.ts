@@ -1,15 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { GetDeviceSettings } from "../../wailsjs/go/main/App"
-import { settings as settingsModels } from "../../wailsjs/go/models"
-import { DEVICE_SETTINGS_DEFAULTS } from "@/lib/device-settings"
-
-export type InventoryPollState = {
-  settings: settingsModels.DeviceSettings | null
-  settingsReady: boolean
-  isRefreshing: boolean
-  lastRefreshedAt: Date | null
-  refresh: () => Promise<void>
-}
+import { useCallback, useEffect, useReducer, useRef } from "react"
+import { useDeviceSettings } from "@/context/device-settings-context"
+import { useInterval } from "@/hooks/use-interval"
+import { MIN_POLL_INTERVAL_SECONDS } from "@/types/settings"
+import type { InventoryPollState } from "@/types/inventory"
 
 // Once per app session — not reset when leaving the Devices tab.
 let sessionStartupRefreshDone = false
@@ -19,53 +12,50 @@ async function simulateInventoryRefresh(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 750))
 }
 
-function defaultDeviceSettings(): settingsModels.DeviceSettings {
-  return settingsModels.DeviceSettings.createFrom({
-    ...DEVICE_SETTINGS_DEFAULTS,
-  })
+type PollState = {
+  isRefreshing: boolean
+  lastRefreshedAt: Date | null
+}
+
+type PollAction =
+  | { type: "refreshStart" }
+  | { type: "refreshDone" }
+  | { type: "refreshStop" }
+
+function pollReducer(state: PollState, action: PollAction): PollState {
+  switch (action.type) {
+    case "refreshStart":
+      return { ...state, isRefreshing: true }
+    case "refreshDone":
+      return { isRefreshing: false, lastRefreshedAt: new Date() }
+    case "refreshStop":
+      return { ...state, isRefreshing: false }
+    default:
+      return state
+  }
 }
 
 export function useDeviceInventoryPoll(active: boolean): InventoryPollState {
-  const [settings, setSettings] =
-    useState<settingsModels.DeviceSettings | null>(null)
-  const [settingsReady, setSettingsReady] = useState(false)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null)
+  const { settings, ready: settingsReady } = useDeviceSettings()
+  const [state, dispatch] = useReducer(pollReducer, {
+    isRefreshing: false,
+    lastRefreshedAt: null,
+  })
   const refreshInFlight = useRef(false)
 
   const refresh = useCallback(async () => {
     if (refreshInFlight.current) return
     refreshInFlight.current = true
-    setIsRefreshing(true)
+    dispatch({ type: "refreshStart" })
     try {
       await simulateInventoryRefresh()
-      setLastRefreshedAt(new Date())
+      dispatch({ type: "refreshDone" })
+    } catch {
+      dispatch({ type: "refreshStop" })
     } finally {
-      setIsRefreshing(false)
       refreshInFlight.current = false
     }
   }, [])
-
-  const loadSettings = useCallback(async () => {
-    setSettingsReady(false)
-    try {
-      const loaded = await GetDeviceSettings()
-      setSettings(loaded)
-    } catch {
-      setSettings(defaultDeviceSettings())
-    } finally {
-      setSettingsReady(true)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!active) {
-      setSettings(null)
-      setSettingsReady(false)
-      return
-    }
-    void loadSettings()
-  }, [active, loadSettings])
 
   useEffect(() => {
     if (
@@ -80,13 +70,21 @@ export function useDeviceInventoryPoll(active: boolean): InventoryPollState {
     void refresh()
   }, [active, settingsReady, settings?.refreshOnStartup, refresh])
 
+  const pollIntervalMs =
+    active &&
+    settingsReady &&
+    settings?.refreshMode === "poll" &&
+    settings.pollIntervalSeconds >= MIN_POLL_INTERVAL_SECONDS
+      ? settings.pollIntervalSeconds * 1000
+      : null
+
   useEffect(() => {
     if (
       !active ||
       !settingsReady ||
       !settings ||
       settings.refreshMode !== "poll" ||
-      settings.pollIntervalSeconds < 1
+      settings.pollIntervalSeconds < MIN_POLL_INTERVAL_SECONDS
     ) {
       return
     }
@@ -94,13 +92,6 @@ export function useDeviceInventoryPoll(active: boolean): InventoryPollState {
     if (!settings.refreshOnStartup) {
       void refresh()
     }
-
-    const intervalMs = settings.pollIntervalSeconds * 1000
-    const id = window.setInterval(() => {
-      void refresh()
-    }, intervalMs)
-
-    return () => window.clearInterval(id)
   }, [
     active,
     settingsReady,
@@ -108,13 +99,18 @@ export function useDeviceInventoryPoll(active: boolean): InventoryPollState {
     settings?.pollIntervalSeconds,
     settings?.refreshOnStartup,
     refresh,
+    settings,
   ])
 
+  useInterval(() => {
+    void refresh()
+  }, pollIntervalMs)
+
   return {
-    settings,
-    settingsReady,
-    isRefreshing,
-    lastRefreshedAt,
+    isRefreshing: state.isRefreshing,
+    lastRefreshedAt: state.lastRefreshedAt,
     refresh,
   }
 }
+
+export type { InventoryPollState } from "@/types/inventory"
