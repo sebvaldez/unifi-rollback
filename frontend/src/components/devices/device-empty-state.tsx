@@ -15,8 +15,8 @@ export function DeviceEmptyState({ onOpenSettings }: DeviceEmptyStateProps) {
         No devices yet
       </h3>
       <p className="mt-2 max-w-sm text-sm text-[var(--unifi-text-muted)]">
-        Connect your Site Manager API key in Settings, then refresh inventory to
-        pull devices from your UniFi sites.
+        Add your Site Manager key under Settings → Credentials, then refresh
+        inventory to pull devices from your UniFi sites.
       </p>
       {onOpenSettings ? (
         <Button

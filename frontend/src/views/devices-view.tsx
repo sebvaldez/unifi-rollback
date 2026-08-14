@@ -1,7 +1,9 @@
 import { DeviceEmptyState } from "@/components/devices/device-empty-state"
+import { DevInventoryToolbar } from "@/components/devices/dev-inventory-toolbar"
 import { DeviceGridView } from "@/components/devices/device-grid-view"
 import { DeviceListView } from "@/components/devices/device-list-view"
 import { DeviceViewToggle } from "@/components/devices/device-view-toggle"
+import { InventoryAccessBanner } from "@/components/devices/inventory-access-banner"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -12,6 +14,7 @@ import {
 } from "@/components/ui/card"
 import { useDeviceInventory } from "@/context/device-inventory-context"
 import { useDeviceViewMode } from "@/hooks/use-device-view-mode"
+import { isDevMode } from "@/lib/dev-mode"
 import { cn } from "@/lib/utils"
 import { X } from "lucide-react"
 
@@ -37,8 +40,8 @@ export function DevicesView({ isRefreshing, onOpenSettings }: DevicesViewProps) 
           <div>
             <CardTitle className="text-base">Device inventory</CardTitle>
             <CardDescription>
-              Fleet-wide view across Site Manager sites. Use per-device actions
-              like Locate when a local Network API key is configured.
+              Fleet-wide view across Site Manager sites. Row actions unlock when
+              credentials in Settings grant the required capabilities.
             </CardDescription>
           </div>
           {hasDevices ? (
@@ -46,6 +49,10 @@ export function DevicesView({ isRefreshing, onOpenSettings }: DevicesViewProps) 
           ) : null}
         </div>
       </CardHeader>
+
+      {isDevMode ? <DevInventoryToolbar /> : null}
+
+      <InventoryAccessBanner onOpenSettings={onOpenSettings} />
 
       {actionError ? (
         <div className="flex items-start justify-between gap-3 border-b border-[var(--unifi-border)] bg-[color-mix(in_srgb,var(--unifi-warning)_8%,var(--unifi-surface))] px-4 py-3 text-sm text-[var(--unifi-text)]">

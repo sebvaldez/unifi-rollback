@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { Tooltip } from "@/components/ui/tooltip"
 import { useDeviceInventory } from "@/context/device-inventory-context"
 import {
   DEVICE_ACTIONS,
@@ -17,6 +18,18 @@ const actionIcons: Record<DeviceActionId, typeof MapPin> = {
 type DeviceRowActionsProps = {
   device: Device
   compact?: boolean
+}
+
+function actionTooltipContent(
+  label: string,
+  description: string,
+  enabled: boolean,
+  reason?: string
+): string {
+  if (enabled) {
+    return `${label} — ${description}`
+  }
+  return reason ?? `${label} — unavailable`
 }
 
 export function DeviceRowActions({ device, compact }: DeviceRowActionsProps) {
@@ -41,18 +54,19 @@ export function DeviceRowActions({ device, compact }: DeviceRowActionsProps) {
         const availability = getDeviceActionAvailability(device, action.id)
         const Icon = actionIcons[action.id]
         const pending = isActionPending(device.id, action.id)
-        const title = availability.enabled
-          ? action.description
-          : (availability.reason ?? action.description)
+        const tooltip = actionTooltipContent(
+          action.label,
+          action.description,
+          availability.enabled,
+          availability.reason
+        )
 
-        return (
+        const button = (
           <Button
-            key={action.id}
             type="button"
             variant="ghost"
             size="sm"
             disabled={!availability.enabled || pending}
-            title={title}
             aria-label={action.label}
             className={cn(
               "h-8 px-2 text-[var(--unifi-text-muted)] hover:text-[var(--unifi-text)]",
@@ -67,6 +81,12 @@ export function DeviceRowActions({ device, compact }: DeviceRowActionsProps) {
               <span className="hidden xl:inline">{action.label}</span>
             ) : null}
           </Button>
+        )
+
+        return (
+          <Tooltip key={action.id} content={tooltip}>
+            {button}
+          </Tooltip>
         )
       })}
       {actionError ? (
