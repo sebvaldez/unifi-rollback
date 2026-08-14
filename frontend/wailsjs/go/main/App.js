@@ -38,6 +38,34 @@ export function IsDevMode() {
   return window['go']['main']['App']['IsDevMode']();
 }
 
+export function ListCredentialSlots() {
+  return window['go']['main']['App']['ListCredentialSlots']();
+}
+
+export function ListDevices() {
+  return window['go']['main']['App']['ListDevices']();
+}
+
+export function RefreshInventory() {
+  return window['go']['main']['App']['RefreshInventory']();
+}
+
+export function RemoveCredential(arg1) {
+  return window['go']['main']['App']['RemoveCredential'](arg1);
+}
+
+export function SaveCredential(arg1) {
+  return window['go']['main']['App']['SaveCredential'](arg1);
+}
+
 export function SaveDeviceSettings(arg1) {
   return window['go']['main']['App']['SaveDeviceSettings'](arg1);
+}
+
+export function SyncCredentialSiteSlots(arg1) {
+  return window['go']['main']['App']['SyncCredentialSiteSlots'](arg1);
+}
+
+export function ValidateCredential(arg1) {
+  return window['go']['main']['App']['ValidateCredential'](arg1);
 }

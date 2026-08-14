@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { useDeviceInventory } from "@/context/device-inventory-context"
+import { resetDeviceSiteFilter } from "@/hooks/use-device-site-filter"
 import {
   fetchCredentialSlots,
   removeCredential as removeCredentialRpc,
@@ -15,6 +17,8 @@ import {
   validateCredential as validateCredentialRpc,
 } from "@/lib/wails-client"
 import type { CredentialSlot, SaveCredentialRequest } from "@/types/credentials"
+
+const SITE_MANAGER_SLOT_ID = "site-manager-primary"
 
 type CredentialsContextValue = {
   slots: CredentialSlot[]
@@ -41,6 +45,7 @@ function upsertSlot(
 }
 
 export function CredentialsProvider({ children }: { children: ReactNode }) {
+  const { setDevices } = useDeviceInventory()
   const [slots, setSlots] = useState<CredentialSlot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -119,18 +124,27 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const removeCredential = useCallback(async (slotId: string) => {
-    setError(null)
-    try {
-      await removeCredentialRpc(slotId)
-      await reload()
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to remove credential"
-      setError(message)
-      throw err
-    }
-  }, [reload])
+  const removeCredential = useCallback(
+    async (slotId: string) => {
+      setError(null)
+      try {
+        await removeCredentialRpc(slotId)
+
+        if (slotId === SITE_MANAGER_SLOT_ID) {
+          setDevices([])
+          resetDeviceSiteFilter()
+        }
+
+        await reload()
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to remove credential"
+        setError(message)
+        throw err
+      }
+    },
+    [reload, setDevices]
+  )
 
   const value = useMemo<CredentialsContextValue>(
     () => ({

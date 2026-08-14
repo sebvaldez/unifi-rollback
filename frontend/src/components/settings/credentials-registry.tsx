@@ -9,6 +9,9 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useCredentials } from "@/context/credentials-context"
+import { useDeviceInventory } from "@/context/device-inventory-context"
+import { ValidationSummaryPanel } from "@/components/settings/validation-summary-panel"
+import { useTypedConfirm } from "@/hooks/use-typed-confirm"
 import { cn } from "@/lib/utils"
 import {
   CREDENTIAL_CAPABILITY_LABELS,
@@ -71,6 +74,8 @@ type CredentialSlotRowProps = {
 function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
   const { saveCredential, validateCredential, removeCredential } =
     useCredentials()
+  const { devices } = useDeviceInventory()
+  const { requestConfirm, confirmDialog } = useTypedConfirm()
   const [secret, setSecret] = useState("")
   const [expanded, setExpanded] = useState(slot.status === "unconfigured")
   const [busy, setBusy] = useState(false)
@@ -116,6 +121,28 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
   }
 
   async function handleRemove() {
+    if (slot.kind === "site_manager" && slot.status === "configured") {
+      const deviceCount = devices.length
+      const confirmed = await requestConfirm({
+        title: "Remove fleet access key?",
+        description: (
+          <>
+            <p>
+              This removes your Site Manager API key from Keychain and clears
+              discovered site credential placeholders.
+            </p>
+            <p className="mt-2">
+              {deviceCount === 0
+                ? "No devices are stored locally."
+                : `${deviceCount} device${deviceCount === 1 ? "" : "s"} will be removed from the local inventory.`}
+            </p>
+          </>
+        ),
+        confirmActionLabel: "Remove key",
+      })
+      if (!confirmed) return
+    }
+
     setBusy(true)
     setActionError(null)
     try {
@@ -131,7 +158,9 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
   }
 
   return (
-    <div className="rounded-lg border border-[var(--unifi-border)] p-4">
+    <>
+      {confirmDialog}
+      <div className="rounded-lg border border-[var(--unifi-border)] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium text-[var(--unifi-text)]">
@@ -156,6 +185,10 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
         <CapabilityChips capabilities={slot.capabilities} />
       </div>
 
+      {slot.validationSummary ? (
+        <ValidationSummaryPanel summary={slot.validationSummary} />
+      ) : null}
+
       {(actionError || slot.validationError) ? (
         <p className="mt-2 text-xs text-[var(--unifi-warning)]">
           {actionError ?? slot.validationError}
@@ -164,14 +197,27 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         {slot.status === "unconfigured" || expanded ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setExpanded((value) => !value)}
-          >
-            {expanded ? "Cancel" : "Add key"}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? "Cancel" : "Add key"}
+            </Button>
+            {slot.kind === "network_integration" && slot.status === "unconfigured" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => void handleRemove()}
+              >
+                Dismiss
+              </Button>
+            ) : null}
+          </>
         ) : (
           <>
             <Button
@@ -219,6 +265,7 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
         </div>
       ) : null}
     </div>
+    </>
   )
 }
 
