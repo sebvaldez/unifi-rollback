@@ -8,9 +8,11 @@ SELECT
     current_fw,
     adoption_state,
     last_seen,
-    updated_at
+    updated_at,
+    in_scope,
+    scope_lost_at
 FROM devices
-ORDER BY name, id;
+ORDER BY in_scope DESC, name, id;
 
 -- name: UpsertDevice :exec
 INSERT INTO devices (
@@ -22,9 +24,11 @@ INSERT INTO devices (
     current_fw,
     adoption_state,
     last_seen,
-    updated_at
+    updated_at,
+    in_scope,
+    scope_lost_at
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 ON CONFLICT(id) DO UPDATE SET
     site_id = excluded.site_id,
@@ -34,7 +38,17 @@ ON CONFLICT(id) DO UPDATE SET
     current_fw = excluded.current_fw,
     adoption_state = excluded.adoption_state,
     last_seen = excluded.last_seen,
-    updated_at = excluded.updated_at;
+    updated_at = excluded.updated_at,
+    in_scope = excluded.in_scope,
+    scope_lost_at = excluded.scope_lost_at;
+
+-- name: MarkDeviceOutOfScope :exec
+UPDATE devices
+SET
+    in_scope = 0,
+    scope_lost_at = ?,
+    updated_at = ?
+WHERE id = ? AND in_scope = 1;
 
 -- name: DeleteAllDevices :exec
 DELETE FROM devices;
