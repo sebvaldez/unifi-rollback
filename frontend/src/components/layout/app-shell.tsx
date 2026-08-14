@@ -1,3 +1,4 @@
+import { AiAssistantLauncher } from "@/components/layout/ai-assistant-launcher"
 import { cn } from "@/lib/utils"
 import {
   HardDriveDownload,
@@ -93,7 +94,10 @@ export function AppShell({
               </p>
             ) : null}
           </div>
-          {actions}
+          <div className="flex items-center gap-2">
+            <AiAssistantLauncher />
+            {actions}
+          </div>
         </header>
 
         <main className="flex-1 overflow-auto p-6">{children}</main>

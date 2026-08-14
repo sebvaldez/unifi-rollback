@@ -1,4 +1,8 @@
-import { Badge } from "@/components/ui/badge"
+import { DeviceEmptyState } from "@/components/devices/device-empty-state"
+import { DeviceGridView } from "@/components/devices/device-grid-view"
+import { DeviceListView } from "@/components/devices/device-list-view"
+import { DeviceViewToggle } from "@/components/devices/device-view-toggle"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -6,22 +10,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { useDeviceInventory } from "@/context/device-inventory-context"
+import { useDeviceViewMode } from "@/hooks/use-device-view-mode"
 import { cn } from "@/lib/utils"
-import { placeholderDevices } from "@/lib/placeholders"
+import { X } from "lucide-react"
 
 type DevicesViewProps = {
   isRefreshing: boolean
+  onOpenSettings?: () => void
 }
 
-export function DevicesView({ isRefreshing }: DevicesViewProps) {
+export function DevicesView({ isRefreshing, onOpenSettings }: DevicesViewProps) {
+  const { devices, actionError, clearActionError } = useDeviceInventory()
+  const [viewMode, setViewMode] = useDeviceViewMode()
+  const hasDevices = devices.length > 0
+
   return (
     <Card
       className={cn(
@@ -30,46 +33,44 @@ export function DevicesView({ isRefreshing }: DevicesViewProps) {
       )}
     >
       <CardHeader className="border-b border-[var(--unifi-border)] pb-4">
-        <CardTitle className="text-base">Device inventory</CardTitle>
-        <CardDescription>
-          Fleet-wide view across Site Manager sites. Connect API keys in
-          Settings to load live data.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Device inventory</CardTitle>
+            <CardDescription>
+              Fleet-wide view across Site Manager sites. Use per-device actions
+              like Locate when a local Network API key is configured.
+            </CardDescription>
+          </div>
+          {hasDevices ? (
+            <DeviceViewToggle mode={viewMode} onChange={setViewMode} />
+          ) : null}
+        </div>
       </CardHeader>
+
+      {actionError ? (
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--unifi-border)] bg-[color-mix(in_srgb,var(--unifi-warning)_8%,var(--unifi-surface))] px-4 py-3 text-sm text-[var(--unifi-text)]">
+          <p>{actionError}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 px-2"
+            aria-label="Dismiss error"
+            onClick={clearActionError}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      ) : null}
+
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>Name</TableHead>
-              <TableHead>Model</TableHead>
-              <TableHead>Firmware</TableHead>
-              <TableHead>Site</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {placeholderDevices.map((device) => (
-              <TableRow key={device.name}>
-                <TableCell className="font-medium">{device.name}</TableCell>
-                <TableCell>{device.model}</TableCell>
-                <TableCell>{device.firmware}</TableCell>
-                <TableCell>{device.site}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={
-                      device.status === "Online"
-                        ? "border-[color-mix(in_srgb,var(--unifi-success)_35%,var(--unifi-surface))] bg-[color-mix(in_srgb,var(--unifi-success)_12%,var(--unifi-surface))] text-[var(--unifi-success)]"
-                        : "border-[var(--unifi-border)] text-[var(--unifi-text-muted)]"
-                    }
-                  >
-                    {device.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        {!hasDevices ? (
+          <DeviceEmptyState onOpenSettings={onOpenSettings} />
+        ) : viewMode === "list" ? (
+          <DeviceListView devices={devices} />
+        ) : (
+          <DeviceGridView devices={devices} />
+        )}
       </CardContent>
     </Card>
   )

@@ -29,3 +29,16 @@ export async function persistDeviceSettings(
 ): Promise<void> {
   await SaveDeviceSettings(toWailsDeviceSettings(settings))
 }
+
+/** Blink device LEDs via Network Integration API locate action. */
+export async function locateDevice(
+  siteId: string,
+  deviceId: string
+): Promise<void> {
+  // TODO: wire to Go unifi client — POST .../devices/{id}/actions { action: "LOCATE" }
+  void siteId
+  void deviceId
+  throw new Error(
+    "Locate is not available until UniFi Network Integration API is connected"
+  )
+}

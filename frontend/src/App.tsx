@@ -25,7 +25,10 @@ function App() {
       }
     >
       {activeNav === "devices" ? (
-        <DevicesView isRefreshing={devicesPoll.isRefreshing} />
+        <DevicesView
+          isRefreshing={devicesPoll.isRefreshing}
+          onOpenSettings={() => setActiveNav("settings")}
+        />
       ) : null}
       {activeNav === "firmware" ? <FirmwareView /> : null}
       {activeNav === "settings" ? <SettingsView /> : null}
