@@ -1,5 +1,6 @@
 import { DeviceRowActions } from "@/components/devices/device-row-actions"
 import { DeviceStatusBadge } from "@/components/devices/device-status-badge"
+import { DeviceIcon } from "@/components/devices/device-icon"
 import {
   Card,
   CardContent,
@@ -23,13 +24,16 @@ export function DeviceGridView({ devices }: DeviceGridViewProps) {
         >
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <CardTitle className="truncate text-base">
-                  {device.name}
-                </CardTitle>
-                <CardDescription className="truncate">
-                  {device.model} · {device.site}
-                </CardDescription>
+              <div className="flex min-w-0 items-start gap-3">
+                <DeviceIcon device={device} size="lg" />
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-base">
+                    {device.name}
+                  </CardTitle>
+                  <CardDescription className="truncate">
+                    {device.model} · {device.site}
+                  </CardDescription>
+                </div>
               </div>
               <DeviceStatusBadge status={device.status} />
             </div>

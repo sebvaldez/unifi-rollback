@@ -1,5 +1,6 @@
 import { DeviceRowActions } from "@/components/devices/device-row-actions"
 import { DeviceStatusBadge } from "@/components/devices/device-status-badge"
+import { DeviceIcon } from "@/components/devices/device-icon"
 import {
   Table,
   TableBody,
@@ -30,7 +31,12 @@ export function DeviceListView({ devices }: DeviceListViewProps) {
       <TableBody>
         {devices.map((device) => (
           <TableRow key={device.id}>
-            <TableCell className="font-medium">{device.name}</TableCell>
+            <TableCell>
+              <div className="flex items-center gap-3">
+                <DeviceIcon device={device} size="sm" />
+                <span className="font-medium">{device.name}</span>
+              </div>
+            </TableCell>
             <TableCell>{device.model}</TableCell>
             <TableCell>{device.firmware}</TableCell>
             <TableCell>{device.site}</TableCell>
