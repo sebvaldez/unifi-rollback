@@ -1,6 +1,60 @@
 package main
 
-import "testing"
+import (
+	"database/sql"
+	"encoding/json"
+	"testing"
+
+	"unifi-rollback/internal/unifi"
+)
+
+func TestNetworkKeyValidationWarning(t *testing.T) {
+	t.Parallel()
+
+	if w := networkKeyValidationWarning(unifi.NetworkKeyProbe{NetworkKeyVerified: true}); w != "" {
+		t.Fatalf("verified warning = %q, want empty", w)
+	}
+	if w := networkKeyValidationWarning(unifi.NetworkKeyProbe{NetworkKeyVerified: false}); w == "" {
+		t.Fatal("unverified warning should not be empty")
+	}
+}
+
+func TestDecodeNetworkProbeSummaryRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	probe := unifi.NetworkKeyProbe{
+		ApplicationVersion: "10.3.58",
+		NetworkSiteID:      "site-uuid",
+		NetworkKeyVerified: false,
+		DeviceCount:        3,
+	}
+	encoded := encodeNetworkProbeSummary(probe)
+	decoded, err := decodeNetworkProbeSummary(encoded)
+	if err != nil {
+		t.Fatalf("decodeNetworkProbeSummary() error = %v", err)
+	}
+	if decoded == nil {
+		t.Fatal("decodeNetworkProbeSummary() = nil, want probe")
+	}
+	if decoded.NetworkKeyVerified {
+		t.Fatal("NetworkKeyVerified should round-trip as false")
+	}
+	if decoded.DeviceCount != 3 {
+		t.Fatalf("DeviceCount = %d, want 3", decoded.DeviceCount)
+	}
+
+	if _, err := decodeNetworkProbeSummary(sql.NullString{}); err != nil {
+		t.Fatalf("empty summary error = %v", err)
+	}
+	if _, err := decodeNetworkProbeSummary(sql.NullString{String: "{", Valid: true}); err == nil {
+		t.Fatal("invalid JSON should error")
+	}
+
+	raw, _ := json.Marshal(probe)
+	if _, err := decodeNetworkProbeSummary(sql.NullString{String: string(raw), Valid: true}); err != nil {
+		t.Fatalf("valid JSON error = %v", err)
+	}
+}
 
 func TestParseNetworkIntegrationSiteID(t *testing.T) {
 	t.Parallel()
