@@ -39,10 +39,15 @@ export function CredentialCapabilitiesBridge() {
     [discoveredSites]
   )
 
+  const fleetAccess = useMemo(
+    () => hasFleetInventoryAccess(slots),
+    [slots]
+  )
+
   useEffect(() => {
-    if (!hasFleetInventoryAccess(slots) || !siteSyncKey) return
+    if (!fleetAccess || !siteSyncKey) return
     void syncDiscoveredSites(discoveredSites)
-  }, [siteSyncKey, discoveredSites, syncDiscoveredSites, slots])
+  }, [siteSyncKey, fleetAccess, syncDiscoveredSites])
 
   useEffect(() => {
     if (devices.length === 0) return

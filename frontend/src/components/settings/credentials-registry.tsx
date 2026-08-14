@@ -69,9 +69,15 @@ function CapabilityChips({ capabilities }: { capabilities: CredentialCapability[
 
 type CredentialSlotRowProps = {
   slot: CredentialSlot
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
 }
 
-function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
+function CredentialSlotRow({
+  slot,
+  expanded,
+  onExpandedChange,
+}: CredentialSlotRowProps) {
   const {
     saveCredential,
     validateCredential,
@@ -81,7 +87,6 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
   const { devices } = useDeviceInventory()
   const { requestConfirm, confirmDialog } = useTypedConfirm()
   const [secret, setSecret] = useState("")
-  const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -100,7 +105,7 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
     try {
       await saveCredential({ slotId: slot.id, secret: secret.trim() })
       setSecret("")
-      setExpanded(false)
+      onExpandedChange(false)
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Failed to save credential"
@@ -130,7 +135,7 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
     try {
       await dismissCredentialSlot(slot.id)
       setSecret("")
-      setExpanded(false)
+      onExpandedChange(false)
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Failed to dismiss credential row"
@@ -168,7 +173,7 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
     try {
       await removeCredential(slot.id)
       setSecret("")
-      setExpanded(false)
+      onExpandedChange(false)
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Failed to remove credential"
@@ -247,7 +252,7 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
               disabled={busy}
               onClick={() => {
                 setActionError(null)
-                setExpanded((value) => !value)
+                onExpandedChange(!expanded)
               }}
             >
               {expanded ? "Cancel" : "Add key"}
@@ -305,6 +310,7 @@ function groupSlots(
 
 export function CredentialsRegistry() {
   const { slots, loading, error } = useCredentials()
+  const [expandedSlotId, setExpandedSlotId] = useState<string | null>(null)
 
   const fleetSlots = groupSlots(slots, ["site_manager"])
   const siteSlots = groupSlots(slots, ["network_integration"])
@@ -341,7 +347,14 @@ export function CredentialsRegistry() {
                 Site Manager API key for inventory across all sites you can access.
               </p>
               {fleetSlots.map((slot) => (
-                <CredentialSlotRow key={slot.id} slot={slot} />
+                <CredentialSlotRow
+                  key={slot.id}
+                  slot={slot}
+                  expanded={expandedSlotId === slot.id}
+                  onExpandedChange={(nextExpanded) =>
+                    setExpandedSlotId(nextExpanded ? slot.id : null)
+                  }
+                />
               ))}
             </section>
 
@@ -362,7 +375,14 @@ export function CredentialsRegistry() {
               ) : (
                 <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
                   {siteSlots.map((slot) => (
-                    <CredentialSlotRow key={slot.id} slot={slot} />
+                    <CredentialSlotRow
+                      key={slot.id}
+                      slot={slot}
+                      expanded={expandedSlotId === slot.id}
+                      onExpandedChange={(nextExpanded) =>
+                        setExpandedSlotId(nextExpanded ? slot.id : null)
+                      }
+                    />
                   ))}
                 </div>
               )}
@@ -381,7 +401,14 @@ export function CredentialsRegistry() {
                 </p>
               ) : (
                 optionalSlots.map((slot) => (
-                  <CredentialSlotRow key={slot.id} slot={slot} />
+                  <CredentialSlotRow
+                    key={slot.id}
+                    slot={slot}
+                    expanded={expandedSlotId === slot.id}
+                    onExpandedChange={(nextExpanded) =>
+                      setExpandedSlotId(nextExpanded ? slot.id : null)
+                    }
+                  />
                 ))
               )}
             </section>

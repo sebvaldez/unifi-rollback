@@ -64,6 +64,31 @@ function applyVisibleSlots(slots: CredentialSlot[]): CredentialSlot[] {
   return dedupeCredentialSlots(filterVisibleCredentialSlots(slots))
 }
 
+function sameCredentialSlotSnapshot(
+  left: CredentialSlot[],
+  right: CredentialSlot[]
+): boolean {
+  if (left.length !== right.length) return false
+  const rightById = new Map(right.map((slot) => [slot.id, slot]))
+  for (const slot of left) {
+    const other = rightById.get(slot.id)
+    if (!other) return false
+    if (
+      slot.status !== other.status ||
+      slot.label !== other.label ||
+      slot.kind !== other.kind ||
+      slot.enabled !== other.enabled ||
+      slot.boundSiteId !== other.boundSiteId ||
+      slot.boundSiteName !== other.boundSiteName ||
+      slot.maskedSuffix !== other.maskedSuffix ||
+      slot.capabilities.join("\0") !== other.capabilities.join("\0")
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
 function upsertSlot(
   slots: CredentialSlot[],
   updated: CredentialSlot
@@ -106,7 +131,10 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
       if (deduped.length === 0) return
       try {
         const synced = await syncCredentialSiteSlots(deduped)
-        setSlots(applyVisibleSlots(synced))
+        const visible = applyVisibleSlots(synced)
+        setSlots((prev) =>
+          sameCredentialSlotSnapshot(prev, visible) ? prev : visible
+        )
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to sync site credentials"
