@@ -1,22 +1,13 @@
 import { cn } from "@/lib/utils"
 import { useCredentials } from "@/context/credentials-context"
 import { useDeviceSettings } from "@/context/device-settings-context"
+import { formatRelativeTime } from "@/hooks/use-fleet-inventory-refresh"
 import { hasFleetInventoryAccess } from "@/lib/device-capabilities"
 import { useTick } from "@/hooks/use-interval"
 import type { InventoryPollState } from "@/types/inventory"
 
 type InventoryStatusIndicatorProps = {
   poll: InventoryPollState
-}
-
-function formatRelativeTime(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (seconds < 10) return "just now"
-  if (seconds < 60) return `${seconds}s ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  return `${hours}h ago`
 }
 
 export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps) {

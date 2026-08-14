@@ -11,11 +11,19 @@ function applicationLabel(app: string): string {
 
 export function ValidationSummaryPanel({
   summary,
+  variant = "card",
 }: {
   summary: ValidationSummary
+  variant?: "card" | "plain"
 }) {
   return (
-    <div className="mt-3 space-y-3 rounded-md border border-[var(--unifi-border)] bg-[color-mix(in_srgb,var(--unifi-surface-elevated,var(--unifi-surface))_60%,var(--unifi-surface))] p-3">
+    <div
+      className={
+        variant === "card"
+          ? "mt-3 space-y-3 rounded-md border border-[var(--unifi-border)] bg-[color-mix(in_srgb,var(--unifi-surface-elevated,var(--unifi-surface))_60%,var(--unifi-surface))] p-3"
+          : "space-y-4"
+      }
+    >
       <div>
         <p className="text-xs font-medium text-[var(--unifi-text)]">
           Discovered access
