@@ -17,14 +17,14 @@ root.render(
   <React.StrictMode>
     <ThemeProvider>
       <TooltipProvider>
-        <CredentialsProvider>
-          <DeviceSettingsProvider>
-            <DeviceInventoryProvider>
+        <DeviceInventoryProvider>
+          <CredentialsProvider>
+            <DeviceSettingsProvider>
               <CredentialCapabilitiesBridge />
               <App />
-            </DeviceInventoryProvider>
-          </DeviceSettingsProvider>
-        </CredentialsProvider>
+            </DeviceSettingsProvider>
+          </CredentialsProvider>
+        </DeviceInventoryProvider>
       </TooltipProvider>
     </ThemeProvider>
   </React.StrictMode>

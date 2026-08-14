@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils"
+import { useCredentials } from "@/context/credentials-context"
 import { useDeviceSettings } from "@/context/device-settings-context"
+import { hasFleetInventoryAccess } from "@/lib/device-capabilities"
 import { useTick } from "@/hooks/use-interval"
 import type { InventoryPollState } from "@/types/inventory"
 
@@ -19,15 +21,19 @@ function formatRelativeTime(date: Date): string {
 
 export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps) {
   const { settings, loading, ready: settingsReady } = useDeviceSettings()
-  const { isRefreshing, lastRefreshedAt, refresh } = poll
+  const { slots, loading: credentialsLoading } = useCredentials()
+  const fleetReady = poll.fleetReady ?? hasFleetInventoryAccess(slots)
+  const { isRefreshing, lastRefreshedAt, refreshError, refresh } = poll
   useTick(lastRefreshedAt ? 10_000 : null)
 
   const isPollMode = settings?.refreshMode === "poll"
   const isManual = settings?.refreshMode === "manual"
 
   let label = "Loading…"
-  if (settingsReady && settings) {
-    if (isRefreshing) {
+  if (settingsReady && settings && !credentialsLoading) {
+    if (!fleetReady) {
+      label = "Fleet key required"
+    } else if (isRefreshing) {
       label = "Refreshing inventory…"
     } else if (isPollMode) {
       label = `Polling every ${settings.pollIntervalSeconds}s`
@@ -36,11 +42,11 @@ export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps
     } else {
       label = "Manual refresh"
     }
-  } else if (loading) {
+  } else if (loading || credentialsLoading) {
     label = "Loading…"
   }
 
-  const clickable = isManual && !isRefreshing && settingsReady
+  const clickable = fleetReady && isManual && !isRefreshing && settingsReady
 
   return (
     <button
@@ -57,11 +63,15 @@ export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps
         !clickable && "cursor-default"
       )}
       title={
-        clickable
-          ? "Click to refresh inventory"
-          : isPollMode
-            ? "Automatic inventory polling is active"
-            : undefined
+        !fleetReady
+          ? "Add and validate a Site Manager key in Settings → Credentials"
+          : refreshError
+          ? refreshError
+          : clickable
+            ? "Click to refresh inventory"
+            : isPollMode
+              ? "Automatic inventory polling is active"
+              : undefined
       }
     >
       <span className="relative flex size-2.5 shrink-0 items-center justify-center">
@@ -70,14 +80,15 @@ export function InventoryStatusIndicator({ poll }: InventoryStatusIndicatorProps
             <span className="inventory-status-ring absolute inset-0 rounded-full bg-[var(--unifi-success)]" />
             <span className="inventory-status-ring inventory-status-ring-delay absolute inset-0 rounded-full bg-[var(--unifi-success)]" />
           </>
-        ) : isPollMode ? (
+        ) : isPollMode && fleetReady ? (
           <span className="inventory-status-breathe absolute inset-0 rounded-full bg-[var(--unifi-success)]" />
         ) : null}
         <span
           className={cn(
-            "relative z-10 size-2 rounded-full bg-[var(--unifi-success)]",
+            "relative z-10 size-2 rounded-full",
+            fleetReady ? "bg-[var(--unifi-success)]" : "bg-[var(--unifi-text-muted)]",
             isRefreshing && "inventory-status-core-active",
-            isPollMode && !isRefreshing && "inventory-status-core-live"
+            isPollMode && fleetReady && !isRefreshing && "inventory-status-core-live"
           )}
         />
       </span>

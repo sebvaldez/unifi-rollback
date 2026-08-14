@@ -20,6 +20,7 @@ export function resolveDeviceCapabilities(
   const network = slots.find(
     (s) =>
       s.kind === "network_integration" &&
+      s.enabled &&
       s.status === "configured" &&
       s.boundSiteId === device.siteId
   )
@@ -30,6 +31,7 @@ export function resolveDeviceCapabilities(
   const classic = slots.find(
     (s) =>
       s.kind === "classic_admin" &&
+      s.enabled &&
       s.status === "configured" &&
       (!s.boundSiteId || s.boundSiteId === device.siteId)
   )
@@ -53,14 +55,23 @@ export function applyCapabilitiesToDevices(
   }))
 }
 
-export function uniqueSitesFromDevices(
+export function sitesFromDevices(
   devices: Device[]
-): { siteId: string; siteName: string }[] {
+): Map<string, string> {
   const bySite = new Map<string, string>()
   for (const device of devices) {
     bySite.set(device.siteId, device.site)
   }
-  return Array.from(bySite, ([siteId, siteName]) => ({ siteId, siteName }))
+  return bySite
+}
+
+export function uniqueSitesFromDevices(
+  devices: Device[]
+): { siteId: string; siteName: string }[] {
+  return Array.from(sitesFromDevices(devices), ([siteId, siteName]) => ({
+    siteId,
+    siteName,
+  }))
 }
 
 /** Sites that appear in inventory but lack a configured Network Integration key. */
@@ -68,16 +79,12 @@ export function sitesMissingDeviceControl(
   devices: Device[],
   slots: CredentialSlot[]
 ): { siteId: string; siteName: string }[] {
-  const bySite = new Map<string, string>()
-  for (const device of devices) {
-    bySite.set(device.siteId, device.site)
-  }
-
   const missing: { siteId: string; siteName: string }[] = []
-  for (const [siteId, siteName] of bySite) {
+  for (const [siteId, siteName] of sitesFromDevices(devices)) {
     const hasNetwork = slots.some(
       (s) =>
         s.kind === "network_integration" &&
+        s.enabled &&
         s.status === "configured" &&
         s.boundSiteId === siteId
     )

@@ -2,6 +2,7 @@ import { useCredentials } from "@/context/credentials-context"
 import { useDeviceInventory } from "@/context/device-inventory-context"
 import {
   applyCapabilitiesToDevices,
+  hasFleetInventoryAccess,
   uniqueSitesFromDevices,
 } from "@/lib/device-capabilities"
 import type { DeviceCapabilities } from "@/types/inventory"
@@ -39,9 +40,9 @@ export function CredentialCapabilitiesBridge() {
   )
 
   useEffect(() => {
-    if (!siteSyncKey) return
+    if (!hasFleetInventoryAccess(slots) || !siteSyncKey) return
     void syncDiscoveredSites(discoveredSites)
-  }, [siteSyncKey, discoveredSites, syncDiscoveredSites])
+  }, [siteSyncKey, discoveredSites, syncDiscoveredSites, slots])
 
   useEffect(() => {
     if (devices.length === 0) return

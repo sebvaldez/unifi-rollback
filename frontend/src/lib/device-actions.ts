@@ -35,6 +35,14 @@ export function getDeviceActionAvailability(
   const { capabilities, status } = device
   const online = status === "online"
 
+  if (device.inScope === false) {
+    return {
+      id: actionId,
+      enabled: false,
+      reason: "Device is outside current API key scope",
+    }
+  }
+
   switch (actionId) {
     case "locate":
       if (!online) {

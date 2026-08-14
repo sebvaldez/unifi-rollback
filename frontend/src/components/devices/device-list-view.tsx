@@ -1,4 +1,5 @@
 import { DeviceRowActions } from "@/components/devices/device-row-actions"
+import { DeviceScopeBadge } from "@/components/devices/device-scope-badge"
 import { DeviceStatusBadge } from "@/components/devices/device-status-badge"
 import { DeviceIcon } from "@/components/devices/device-icon"
 import {
@@ -9,7 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { Device } from "@/types/inventory"
+import { cn } from "@/lib/utils"
+import { isGhostDevice, type Device } from "@/types/inventory"
 
 type DeviceListViewProps = {
   devices: Device[]
@@ -29,25 +31,47 @@ export function DeviceListView({ devices }: DeviceListViewProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {devices.map((device) => (
-          <TableRow key={device.id}>
+        {devices.map((device) => {
+          const ghost = isGhostDevice(device)
+          return (
+          <TableRow
+            key={device.id}
+            className={cn(
+              ghost &&
+                "border-dashed bg-[color-mix(in_srgb,var(--unifi-warning)_4%,var(--unifi-surface))] opacity-70"
+            )}
+          >
             <TableCell>
               <div className="flex items-center gap-3">
                 <DeviceIcon device={device} size="sm" />
-                <span className="font-medium">{device.name}</span>
+                <span
+                  className={cn(
+                    "font-medium",
+                    ghost && "text-[var(--unifi-text-muted)] line-through decoration-dashed"
+                  )}
+                >
+                  {device.name}
+                </span>
               </div>
             </TableCell>
-            <TableCell>{device.model}</TableCell>
-            <TableCell>{device.firmware}</TableCell>
-            <TableCell>{device.site}</TableCell>
+            <TableCell className={ghost ? "text-[var(--unifi-text-muted)]" : undefined}>
+              {device.model}
+            </TableCell>
+            <TableCell className={ghost ? "text-[var(--unifi-text-muted)]" : undefined}>
+              {device.firmware}
+            </TableCell>
+            <TableCell className={ghost ? "text-[var(--unifi-text-muted)]" : undefined}>
+              {device.site}
+            </TableCell>
             <TableCell>
-              <DeviceStatusBadge status={device.status} />
+              {ghost ? <DeviceScopeBadge /> : <DeviceStatusBadge status={device.status} />}
             </TableCell>
             <TableCell className="text-right">
               <DeviceRowActions device={device} />
             </TableCell>
           </TableRow>
-        ))}
+          )
+        })}
       </TableBody>
     </Table>
   )
