@@ -1,6 +1,7 @@
 import { ThemePreferencePicker } from "@/components/settings/theme-preference-picker"
 import { DeviceSettingsCard } from "@/components/settings/device-settings-card"
 import { CredentialsRegistry } from "@/components/settings/credentials-registry"
+import { KeychainDevToolsCard } from "@/components/settings/keychain-dev-tools-card"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -49,6 +50,8 @@ export function SettingsView() {
       <CredentialsRegistry />
 
       <DeviceSettingsCard />
+
+      <KeychainDevToolsCard />
 
       <Card className="border-[var(--unifi-border)] shadow-sm">
         <CardHeader>

@@ -160,7 +160,8 @@ CREATE TABLE action_log (
 
 ### 5.2 macOS Keychain — all secret material
 
-Stored via `keybase/go-keychain`, service namespace `com.<you>.unifi-fleet-tool`:
+Stored via `keybase/go-keychain`, service namespace **`com.wails.unifi-rollback`**
+(matches Wails bundle id `com.wails.unifi-rollback` in `build/darwin/Info.plist`):
 
 | account | contents |
 |---|---|
@@ -170,9 +171,32 @@ Stored via `keybase/go-keychain`, service namespace `com.<you>.unifi-fleet-tool`
 | `claude-api-key` | Optional, for confidence scoring |
 | `openai-api-key` | Optional, for confidence scoring |
 
-`AccessibleWhenUnlockedThisDeviceOnly`, `SynchronizableNo` on every item (see
-§9 of prior discussion for CRUD walkthrough — carry that into `secrets/`
-package as `Save`, `Get`, `Delete`, `List` wrapping Add/QueryItem/Update/DeleteItem).
+Every item uses `AccessibleWhenUnlockedThisDeviceOnly` and `SynchronizableNo`.
+
+**`internal/secrets/` API (implemented):**
+
+| Method | Purpose |
+|---|---|
+| `Save(account, secret)` | Add or update generic password |
+| `Get(account)` | Read secret material |
+| `Delete(account)` | Remove one item |
+| `ListAccounts()` | List account names for this service |
+| `WipeAll()` | Delete all items under the service namespace |
+| `MaskedSuffix(secret)` | Last four chars for `credentials_meta` display |
+
+**Dev vs production (Keychain UI):**
+
+- **`wails dev` only:** Settings shows **Keychain dev tools** — add test credentials,
+  list account names, delete one, wipe all. Wails methods `DevKeychain*` are
+  guarded by `requireDevMode()` (`runtime.Environment(ctx).BuildType == "dev"`).
+- **`wails build`:** dev panel hidden; `DevKeychain*` calls rejected. Production
+  credential onboarding (validate → Keychain → `credentials_meta`) is a
+  separate follow-up branch.
+- **Do not use `window.confirm` in Wails** — use `TypedConfirmDialog` +
+  `useTypedConfirm()`; destructive actions require typing **`DELETE`**.
+- **Keychain ACL caveat:** items are tied to the app binary that created them.
+  After a dev rebuild, list/delete may fail until stale entries are removed in
+  Keychain Access (login keychain) or the app is restarted without rebuilding.
 
 ### 5.3 Credentials — architecture & UX
 
@@ -407,9 +431,11 @@ attaches `.dmg`/`.zip` to a GitHub Release automatically.
 - [x] Scaffold Wails project (`wails init`), Go module layout per §4.
 - [x] SQLite migrations for schema in §5.1.
 - [x] Device refresh preferences (manual / poll, interval, startup) in Settings.
-- [ ] `secrets/` package wrapping go-keychain CRUD.
-- [ ] Onboarding UI: collect + validate Site Manager key, Network key(s),
-      optional Claude/OpenAI keys.
+- [x] GitHub PR template (`.github/pull_request_template.md`).
+- [x] `secrets/` package — Keychain Save / Get / Delete / ListAccounts / WipeAll (§5.2).
+- [x] Keychain dev tools UI (`wails dev` only) + typed destructive confirm dialog.
+- [ ] Production onboarding UI: validate Site Manager key → Keychain → `credentials_meta`.
+- [ ] Onboarding UI: collect + validate Network key(s), optional Claude/OpenAI keys.
 - [ ] `unifi/` client: Site Manager + Network Integration API calls.
 - [ ] Device inventory screen.
 - [ ] `firmware/` package: domain allowlist, download, SHA256, manifest CRUD.
