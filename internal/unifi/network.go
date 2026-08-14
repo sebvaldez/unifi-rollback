@@ -2,6 +2,7 @@ package unifi
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -28,6 +29,13 @@ func NewNetworkClientWithHTTP(consoleBaseURL, apiKey string, httpClient *http.Cl
 	}
 }
 
+// NewNetworkClientForLocalConsole dials a LAN console with a self-signed TLS certificate.
+func NewNetworkClientForLocalConsole(consoleBaseURL, apiKey string) *NetworkClient {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // local UniFi consoles use self-signed certs
+	return NewNetworkClientWithHTTP(consoleBaseURL, apiKey, &http.Client{Transport: transport})
+}
+
 func stringsTrimRightSlash(s string) string {
 	for len(s) > 0 && s[len(s)-1] == '/' {
 		s = s[:len(s)-1]
@@ -42,8 +50,9 @@ type ApplicationInfo struct {
 
 // NetworkSite is a local site from GET /v1/sites.
 type NetworkSite struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID                  string `json:"id"`
+	InternalReference   string `json:"internalReference"`
+	Name                string `json:"name"`
 }
 
 type networkSitePage struct {

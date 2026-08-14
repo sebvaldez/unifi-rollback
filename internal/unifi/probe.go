@@ -25,17 +25,26 @@ type KeyAccessProbe struct {
 }
 
 // ProbeKeyAccess validates the key and discovers reachable sites, apps, and devices.
-func (c *SiteManagerClient) ProbeKeyAccess(ctx context.Context) (KeyAccessProbe, error) {
+func (c *SiteManagerClient) ProbeKeyAccess(ctx context.Context, report ...ProbeReporter) (KeyAccessProbe, error) {
+	var reporter ProbeReporter
+	if len(report) > 0 {
+		reporter = report[0]
+	}
+
+	target := c.BaseURL()
+	reportProbeStep(reporter, "Listing sites visible to this key", target)
 	sites, err := c.ListSites(ctx)
 	if err != nil {
 		return KeyAccessProbe{}, err
 	}
 
+	reportProbeStep(reporter, "Listing fleet devices", target)
 	groups, err := c.ListAllDevices(ctx, ListDevicesParams{})
 	if err != nil {
 		return KeyAccessProbe{}, err
 	}
 
+	reportProbeStep(reporter, "Listing consoles (hosts)", target)
 	hosts, hostsErr := c.ListHosts(ctx)
 	if hostsErr != nil {
 		// Host listing is optional for the probe — sites + devices are enough.

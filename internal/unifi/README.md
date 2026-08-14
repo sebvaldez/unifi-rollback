@@ -8,7 +8,7 @@ Go HTTP clients for Ubiquiti APIs used by Fleet Manager.
 |--------|------|------|-----|
 | `SiteManagerClient` | `sitemanager.go` | `X-API-KEY` (cloud) | Fleet inventory: sites, hosts, devices |
 | `NetworkClient` | `network.go` | `X-API-KEY` (Integration) | Per-site devices, RESTART, statistics |
-| Connector | `connector.go` | Same cloud key | Remote Integration via Site Manager proxy |
+| Connector | `connector.go` | Site Manager API key | Remote Integration via cloud proxy |
 | `ClassicClient` | `classic.go` | Cookie + CSRF | LED locate only (Integration gap) |
 | `RollbackVerifier` | `verify.go` | Uses `NetworkClient` | Post-SSH rollback firmware check |
 

@@ -18,8 +18,8 @@ func NewNetworkClientViaConnector(sm *SiteManagerClient, consoleID string) *Netw
 	return NewNetworkClientViaConnectorWithKey(sm, consoleID, sm.APIKey())
 }
 
-// NewNetworkClientViaConnectorWithKey routes Integration requests through Connector Proxy
-// using apiKey (typically a per-site Network Integration key).
+// NewNetworkClientViaConnectorWithKey routes Integration requests through Connector Proxy.
+// apiKey must be a Site Manager (fleet) API key — the cloud connector rejects Network Integration keys.
 func NewNetworkClientViaConnectorWithKey(sm *SiteManagerClient, consoleID, apiKey string) *NetworkClient {
 	if sm == nil {
 		panic("unifi: SiteManagerClient is nil")

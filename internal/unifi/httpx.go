@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -107,4 +108,10 @@ func (e *HTTPError) Error() string {
 		return fmt.Sprintf("%s %s: HTTP %d", e.Method, e.Path, e.StatusCode)
 	}
 	return fmt.Sprintf("%s %s: HTTP %d: %s", e.Method, e.Path, e.StatusCode, e.Body)
+}
+
+// IsHTTPStatus reports whether err is an HTTPError with the given status code.
+func IsHTTPStatus(err error, code int) bool {
+	var httpErr *HTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode == code
 }
