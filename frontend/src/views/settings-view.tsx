@@ -1,8 +1,8 @@
 import { ThemePreferencePicker } from "@/components/settings/theme-preference-picker"
 import { DeviceSettingsCard } from "@/components/settings/device-settings-card"
+import { CredentialsRegistry } from "@/components/settings/credentials-registry"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -10,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { useWailsQuery } from "@/hooks/use-wails-query"
 import {
   fetchDatabasePath,
@@ -47,31 +46,7 @@ export function SettingsView() {
         </CardContent>
       </Card>
 
-      <Card className="border-[var(--unifi-border)] shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Credentials</CardTitle>
-          <CardDescription>
-            API keys are stored in macOS Keychain — never in SQLite.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label
-              htmlFor="site-manager-key"
-              className="text-sm font-medium text-[var(--unifi-text)]"
-            >
-              Site Manager API key
-            </label>
-            <Input
-              id="site-manager-key"
-              type="password"
-              placeholder="Paste api.ui.com key"
-              disabled
-            />
-          </div>
-          <Button disabled>Save to Keychain</Button>
-        </CardContent>
-      </Card>
+      <CredentialsRegistry />
 
       <DeviceSettingsCard />
 

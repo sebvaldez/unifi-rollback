@@ -32,7 +32,8 @@ export function getDeviceActionAvailability(
   device: Device,
   actionId: DeviceActionId
 ): DeviceActionAvailability {
-  const online = device.status === "online"
+  const { capabilities, status } = device
+  const online = status === "online"
 
   switch (actionId) {
     case "locate":
@@ -43,11 +44,12 @@ export function getDeviceActionAvailability(
           reason: "Device must be online",
         }
       }
-      if (!device.hasLocalApi) {
+      if (!capabilities.locate) {
         return {
           id: actionId,
           enabled: false,
-          reason: "Requires a local Network API key for this site",
+          reason:
+            "Requires Classic admin credentials for this site — add in Settings",
         }
       }
       return { id: actionId, enabled: true }
@@ -60,11 +62,11 @@ export function getDeviceActionAvailability(
           reason: "Device must be online",
         }
       }
-      if (!device.hasLocalApi) {
+      if (!capabilities.restart) {
         return {
           id: actionId,
           enabled: false,
-          reason: "Requires a local Network API key for this site",
+          reason: `Requires a Network Integration key for ${device.site} — configure in Settings`,
         }
       }
       return { id: actionId, enabled: true }
@@ -77,11 +79,14 @@ export function getDeviceActionAvailability(
           reason: "Device must be online",
         }
       }
-      return {
-        id: actionId,
-        enabled: false,
-        reason: "Coming soon — pick a verified manifest entry first",
+      if (!capabilities.rollback) {
+        return {
+          id: actionId,
+          enabled: false,
+          reason: "Coming soon — verified manifest + device SSH required",
+        }
       }
+      return { id: actionId, enabled: true }
 
     default:
       return { id: actionId, enabled: false, reason: "Unavailable" }

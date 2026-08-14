@@ -2,8 +2,23 @@ export type DeviceStatus = "online" | "offline" | "adopting" | "unknown"
 
 export type DeviceViewMode = "list" | "grid"
 
-/** Actions the Network Integration API supports for adopted devices. */
+/** Actions the UI exposes for adopted devices. */
 export type DeviceActionId = "locate" | "restart" | "rollback"
+
+/** Derived from credential validation — drives row action enablement. */
+export type DeviceCapabilities = {
+  inventory: boolean
+  restart: boolean
+  locate: boolean
+  rollback: boolean
+}
+
+export const EMPTY_DEVICE_CAPABILITIES: DeviceCapabilities = {
+  inventory: false,
+  restart: false,
+  locate: false,
+  rollback: false,
+}
 
 export type Device = {
   id: string
@@ -14,8 +29,9 @@ export type Device = {
   status: DeviceStatus
   site: string
   mac?: string
-  /** Whether a local Network Integration API key is configured for this site. */
-  hasLocalApi?: boolean
+  /** Optional override; otherwise resolved from model via unifi-device-icons. */
+  iconUrl?: string
+  capabilities: DeviceCapabilities
 }
 
 export type DeviceActionAvailability = {
