@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -97,6 +98,9 @@ func (a *App) SaveCredential(request SaveCredentialRequest) (CredentialSlot, err
 	case slotSiteManagerPrimary:
 		return a.saveSiteManagerCredential(request)
 	default:
+		if siteID, ok := parseNetworkIntegrationSiteID(request.SlotID); ok {
+			return a.saveNetworkIntegrationCredential(siteID, request)
+		}
 		return CredentialSlot{}, fmt.Errorf("unsupported credential slot %q", request.SlotID)
 	}
 }
@@ -111,6 +115,9 @@ func (a *App) ValidateCredential(slotID string) (CredentialSlot, error) {
 	case slotSiteManagerPrimary:
 		return a.validateSiteManagerCredential()
 	default:
+		if siteID, ok := parseNetworkIntegrationSiteID(slotID); ok {
+			return a.validateNetworkIntegrationCredential(siteID)
+		}
 		return CredentialSlot{}, fmt.Errorf("unsupported credential slot %q", slotID)
 	}
 }
@@ -141,23 +148,13 @@ func (a *App) SyncCredentialSiteSlots(sites []DiscoveredSite) ([]CredentialSlot,
 		return nil, errors.New("database not available")
 	}
 
-	for _, site := range sites {
-		siteID := strings.TrimSpace(site.SiteID)
-		if siteID == "" {
-			continue
-		}
-
-		label := strings.TrimSpace(site.SiteName)
-		if label == "" {
-			label = siteID
-		}
-
+	for _, site := range dedupeDiscoveredSites(sites) {
 		err := a.store.Queries().UpsertCredentialMetaLabel(a.ctx, sqlc.UpsertCredentialMetaLabelParams{
-			KeyType: networkLocalKeyType(siteID),
-			Label:   sql.NullString{String: label, Valid: true},
+			KeyType: networkLocalKeyType(site.SiteID),
+			Label:   sql.NullString{String: site.SiteName, Valid: true},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("upsert network slot for site %q: %w", siteID, err)
+			return nil, fmt.Errorf("upsert network slot for site %q: %w", site.SiteID, err)
 		}
 	}
 
@@ -392,49 +389,397 @@ func (a *App) deleteAllNetworkLocalCredentialMeta() error {
 	return nil
 }
 
+func (a *App) saveNetworkIntegrationCredential(siteID string, request SaveCredentialRequest) (CredentialSlot, error) {
+	secret := strings.TrimSpace(request.Secret)
+	if secret == "" {
+		return CredentialSlot{}, errors.New("API key cannot be empty")
+	}
+
+	client, hostID, err := a.networkClientForSite(siteID, secret)
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+
+	probe, err := client.ProbeKeyAccess(a.ctx, siteID)
+	if err != nil {
+		return CredentialSlot{}, fmt.Errorf("network integration validation failed: %w", err)
+	}
+
+	store, err := a.secretsStore()
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+	account := secrets.NetworkLocalAPIKeyAccount(siteID)
+	if err := store.Save(account, secret); err != nil {
+		return CredentialSlot{}, fmt.Errorf("save network integration key: %w", err)
+	}
+
+	label := strings.TrimSpace(request.Label)
+	if label == "" {
+		label, _ = a.networkIntegrationLabel(siteID)
+	}
+	if label == "" {
+		label = siteID
+	}
+
+	now := time.Now().UTC()
+	if err := a.store.Queries().UpsertCredentialMeta(a.ctx, sqlc.UpsertCredentialMetaParams{
+		KeyType:         networkLocalKeyType(siteID),
+		Label:           sql.NullString{String: label, Valid: true},
+		LastValidatedAt: sql.NullTime{Time: now, Valid: true},
+		MaskedSuffix:    sql.NullString{String: secrets.MaskedSuffix(secret), Valid: true},
+		ProbeSummary:    encodeNetworkProbeSummary(probe),
+	}); err != nil {
+		return CredentialSlot{}, fmt.Errorf("save network integration metadata: %w", err)
+	}
+
+	return CredentialSlot{
+		ID:              networkSlotID(siteID),
+		Kind:            "network_integration",
+		Label:           label,
+		Status:          "configured",
+		Capabilities:    unifi.CapabilitiesFromNetworkProbe(probe),
+		Enabled:         true,
+		BoundSiteID:     siteID,
+		BoundSiteName:   label,
+		BoundHostID:     hostID,
+		MaskedSuffix:    secrets.MaskedSuffix(secret),
+		LastValidatedAt: now.Format(time.RFC3339),
+	}, nil
+}
+
+func (a *App) validateNetworkIntegrationCredential(siteID string) (CredentialSlot, error) {
+	store, err := a.secretsStore()
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+
+	account := secrets.NetworkLocalAPIKeyAccount(siteID)
+	secret, err := store.Get(account)
+	if errors.Is(err, secrets.ErrNotFound) {
+		return CredentialSlot{}, errors.New("add a key before validating")
+	}
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+
+	client, hostID, err := a.networkClientForSite(siteID, secret)
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+
+	probe, err := client.ProbeKeyAccess(a.ctx, siteID)
+	if err != nil {
+		return CredentialSlot{}, fmt.Errorf("network integration validation failed: %w", err)
+	}
+
+	slot, err := a.loadNetworkIntegrationSlot(siteID)
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+
+	now := time.Now().UTC()
+	if err := a.store.Queries().UpsertCredentialMeta(a.ctx, sqlc.UpsertCredentialMetaParams{
+		KeyType:         networkLocalKeyType(siteID),
+		Label:           sql.NullString{String: slot.Label, Valid: true},
+		LastValidatedAt: sql.NullTime{Time: now, Valid: true},
+		MaskedSuffix:    sql.NullString{String: secrets.MaskedSuffix(secret), Valid: true},
+		ProbeSummary:    encodeNetworkProbeSummary(probe),
+	}); err != nil {
+		return CredentialSlot{}, fmt.Errorf("update network integration metadata: %w", err)
+	}
+
+	slot.Status = "configured"
+	slot.Capabilities = unifi.CapabilitiesFromNetworkProbe(probe)
+	slot.MaskedSuffix = secrets.MaskedSuffix(secret)
+	slot.LastValidatedAt = now.Format(time.RFC3339)
+	slot.ValidationError = ""
+	slot.BoundHostID = hostID
+	return slot, nil
+}
+
+func (a *App) networkClientForSite(siteID, networkKey string) (*unifi.NetworkClient, string, error) {
+	hostID, err := a.resolveHostIDForSite(siteID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	sm, smErr := a.siteManagerClient()
+	if smErr == nil && hostID != "" {
+		return unifi.NewNetworkClientViaConnectorWithKey(sm, hostID, networkKey), hostID, nil
+	}
+
+	if hostID == "" {
+		if smErr != nil {
+			return nil, "", fmt.Errorf("configure fleet access before adding network keys: %w", smErr)
+		}
+		return nil, "", fmt.Errorf("no console found for site %q", siteID)
+	}
+
+	consoleURL, err := a.consoleURLForHost(hostID)
+	if err != nil {
+		return nil, "", err
+	}
+	return unifi.NewNetworkClient(consoleURL, networkKey), hostID, nil
+}
+
+func (a *App) resolveHostIDForSite(siteID string) (string, error) {
+	meta, metaErr := a.store.Queries().GetCredentialMeta(a.ctx, keyTypeSiteManager)
+	if metaErr == nil {
+		if summary, err := decodeProbeSummary(meta.ProbeSummary); err != nil {
+			return "", err
+		} else if summary != nil {
+			for _, site := range summary.Sites {
+				if site.SiteID == siteID && site.HostID != "" {
+					return site.HostID, nil
+				}
+			}
+		}
+	} else if !errors.Is(metaErr, sql.ErrNoRows) {
+		return "", fmt.Errorf("load site manager metadata: %w", metaErr)
+	}
+
+	sm, err := a.siteManagerClient()
+	if errors.Is(err, secrets.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	sites, err := sm.ListSites(a.ctx)
+	if err != nil {
+		return "", fmt.Errorf("list sites: %w", err)
+	}
+	for _, site := range sites {
+		if site.SiteID == siteID && site.HostID != "" {
+			return site.HostID, nil
+		}
+	}
+
+	if hostID := a.singleHostIDFromFleet(); hostID != "" {
+		return hostID, nil
+	}
+
+	return "", nil
+}
+
+func (a *App) singleHostIDFromFleet() string {
+	meta, err := a.store.Queries().GetCredentialMeta(a.ctx, keyTypeSiteManager)
+	if err == nil {
+		if summary, decodeErr := decodeProbeSummary(meta.ProbeSummary); decodeErr == nil && summary != nil {
+			hosts := make(map[string]struct{})
+			for _, site := range summary.Sites {
+				if site.HostID != "" {
+					hosts[site.HostID] = struct{}{}
+				}
+			}
+			if len(hosts) == 1 {
+				for hostID := range hosts {
+					return hostID
+				}
+			}
+		}
+	}
+
+	sm, err := a.siteManagerClient()
+	if err != nil {
+		return ""
+	}
+
+	sites, err := sm.ListSites(a.ctx)
+	if err != nil {
+		return ""
+	}
+	hosts := make(map[string]struct{})
+	for _, site := range sites {
+		if site.HostID != "" {
+			hosts[site.HostID] = struct{}{}
+		}
+	}
+	if len(hosts) == 1 {
+		for hostID := range hosts {
+			return hostID
+		}
+	}
+
+	hostList, err := sm.ListHosts(a.ctx)
+	if err != nil || len(hostList) != 1 {
+		return ""
+	}
+	return hostList[0].ID
+}
+
+func (a *App) consoleURLForHost(hostID string) (string, error) {
+	sm, err := a.siteManagerClient()
+	if err != nil {
+		return "", err
+	}
+
+	host, err := sm.GetHost(a.ctx, hostID)
+	if err != nil {
+		return "", fmt.Errorf("load console host: %w", err)
+	}
+
+	ip := strings.TrimSpace(host.IPAddress)
+	if ip == "" {
+		return "", errors.New("console IP unavailable for direct network validation")
+	}
+	return "https://" + ip, nil
+}
+
+func (a *App) networkIntegrationLabel(siteID string) (string, error) {
+	meta, err := a.store.Queries().GetCredentialMeta(a.ctx, networkLocalKeyType(siteID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return siteID, nil
+		}
+		return "", err
+	}
+	if meta.Label.Valid && meta.Label.String != "" {
+		return meta.Label.String, nil
+	}
+	return siteID, nil
+}
+
+func (a *App) loadNetworkIntegrationSlot(siteID string) (CredentialSlot, error) {
+	meta, err := a.store.Queries().GetCredentialMeta(a.ctx, networkLocalKeyType(siteID))
+	if err != nil {
+		return CredentialSlot{}, fmt.Errorf("load network integration metadata for site %q: %w", siteID, err)
+	}
+	return networkSlotFromMeta(siteID, meta), nil
+}
+
 func (a *App) loadNetworkIntegrationSlots() ([]CredentialSlot, error) {
 	rows, err := a.store.Queries().ListCredentialsMeta(a.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list credential metadata: %w", err)
 	}
 
-	var slots []CredentialSlot
+	bySiteID := make(map[string]CredentialSlot)
 	for _, row := range rows {
 		if !strings.HasPrefix(row.KeyType, keyTypeNetworkLocal) {
 			continue
 		}
 
 		siteID := strings.TrimPrefix(row.KeyType, keyTypeNetworkLocal)
-		label := siteID
-		if row.Label.Valid && row.Label.String != "" {
-			label = row.Label.String
+		siteID = strings.TrimSpace(siteID)
+		if siteID == "" {
+			continue
 		}
 
-		slot := CredentialSlot{
-			ID:            networkSlotID(siteID),
-			Kind:          "network_integration",
-			Label:         label,
-			Status:        "unconfigured",
-			Capabilities:  nil,
-			Enabled:       true,
-			BoundSiteID:   siteID,
-			BoundSiteName: label,
+		slot := networkSlotFromMeta(siteID, row)
+		existing, ok := bySiteID[siteID]
+		if !ok || networkSlotRank(slot) > networkSlotRank(existing) {
+			bySiteID[siteID] = slot
 		}
-
-		if row.MaskedSuffix.Valid && row.MaskedSuffix.String != "" {
-			slot.Status = "configured"
-			slot.Capabilities = []string{"device_read", "device_restart"}
-			slot.MaskedSuffix = row.MaskedSuffix.String
-		}
-
-		if row.LastValidatedAt.Valid {
-			slot.LastValidatedAt = row.LastValidatedAt.Time.UTC().Format(time.RFC3339)
-		}
-
-		slots = append(slots, slot)
 	}
 
+	slots := make([]CredentialSlot, 0, len(bySiteID))
+	for _, slot := range bySiteID {
+		slots = append(slots, slot)
+	}
+	sortNetworkSlots(slots)
 	return slots, nil
+}
+
+func networkSlotFromMeta(siteID string, row sqlc.CredentialsMetum) CredentialSlot {
+	label := siteID
+	if row.Label.Valid && row.Label.String != "" {
+		label = row.Label.String
+	}
+
+	slot := CredentialSlot{
+		ID:            networkSlotID(siteID),
+		Kind:          "network_integration",
+		Label:         label,
+		Status:        "unconfigured",
+		Capabilities:  nil,
+		Enabled:       true,
+		BoundSiteID:   siteID,
+		BoundSiteName: label,
+	}
+
+	if row.MaskedSuffix.Valid && row.MaskedSuffix.String != "" {
+		slot.Status = "configured"
+		slot.Capabilities = []string{"device_read", "device_restart"}
+		slot.MaskedSuffix = row.MaskedSuffix.String
+	}
+
+	if row.LastValidatedAt.Valid {
+		slot.LastValidatedAt = row.LastValidatedAt.Time.UTC().Format(time.RFC3339)
+	}
+
+	return slot
+}
+
+func networkSlotRank(slot CredentialSlot) int {
+	switch slot.Status {
+	case "configured":
+		return 2
+	case "invalid":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func sortNetworkSlots(slots []CredentialSlot) {
+	sort.Slice(slots, func(i, j int) bool {
+		return strings.ToLower(slots[i].Label) < strings.ToLower(slots[j].Label)
+	})
+}
+
+func dedupeDiscoveredSites(sites []DiscoveredSite) []DiscoveredSite {
+	byID := make(map[string]DiscoveredSite)
+	for _, site := range sites {
+		siteID := strings.TrimSpace(site.SiteID)
+		if siteID == "" {
+			continue
+		}
+
+		label := strings.TrimSpace(site.SiteName)
+		if label == "" {
+			label = siteID
+		}
+
+		existing, ok := byID[siteID]
+		if !ok {
+			byID[siteID] = DiscoveredSite{SiteID: siteID, SiteName: label}
+			continue
+		}
+		if len(label) > len(existing.SiteName) {
+			byID[siteID] = DiscoveredSite{SiteID: siteID, SiteName: label}
+		}
+	}
+
+	result := make([]DiscoveredSite, 0, len(byID))
+	for _, site := range byID {
+		result = append(result, site)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.ToLower(result[i].SiteName) < strings.ToLower(result[j].SiteName)
+	})
+	return result
+}
+
+func parseNetworkIntegrationSiteID(slotID string) (string, bool) {
+	if !strings.HasPrefix(slotID, "network-integration-") {
+		return "", false
+	}
+	siteID := strings.TrimSpace(strings.TrimPrefix(slotID, "network-integration-"))
+	if siteID == "" {
+		return "", false
+	}
+	return siteID, true
+}
+
+func encodeNetworkProbeSummary(probe unifi.NetworkKeyProbe) sql.NullString {
+	raw, err := json.Marshal(probe)
+	if err != nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: string(raw), Valid: true}
 }
 
 func (a *App) siteManagerAPIKey() (string, error) {

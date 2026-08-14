@@ -15,6 +15,12 @@ const connectorProxyPrefix = "/connector/consoles"
 //
 //	https://api.ui.com/v1/connector/consoles/{consoleId}/proxy/network/integration/v1/sites/...
 func NewNetworkClientViaConnector(sm *SiteManagerClient, consoleID string) *NetworkClient {
+	return NewNetworkClientViaConnectorWithKey(sm, consoleID, sm.APIKey())
+}
+
+// NewNetworkClientViaConnectorWithKey routes Integration requests through Connector Proxy
+// using apiKey (typically a per-site Network Integration key).
+func NewNetworkClientViaConnectorWithKey(sm *SiteManagerClient, consoleID, apiKey string) *NetworkClient {
 	if sm == nil {
 		panic("unifi: SiteManagerClient is nil")
 	}
@@ -25,7 +31,7 @@ func NewNetworkClientViaConnector(sm *SiteManagerClient, consoleID string) *Netw
 		consoleID,
 	)
 	return &NetworkClient{
-		client: newAPIClient(base, sm.APIKey(), sm.client.http),
+		client: newAPIClient(base, apiKey, sm.client.http),
 	}
 }
 

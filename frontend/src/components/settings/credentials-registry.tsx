@@ -72,12 +72,16 @@ type CredentialSlotRowProps = {
 }
 
 function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
-  const { saveCredential, validateCredential, removeCredential } =
-    useCredentials()
+  const {
+    saveCredential,
+    validateCredential,
+    removeCredential,
+    dismissCredentialSlot,
+  } = useCredentials()
   const { devices } = useDeviceInventory()
   const { requestConfirm, confirmDialog } = useTypedConfirm()
   const [secret, setSecret] = useState("")
-  const [expanded, setExpanded] = useState(slot.status === "unconfigured")
+  const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -120,6 +124,22 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
     }
   }
 
+  async function handleDismiss() {
+    setBusy(true)
+    setActionError(null)
+    try {
+      await dismissCredentialSlot(slot.id)
+      setSecret("")
+      setExpanded(false)
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to dismiss credential row"
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleRemove() {
     if (slot.kind === "site_manager" && slot.status === "configured") {
       const deviceCount = devices.length
@@ -147,7 +167,8 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
     setActionError(null)
     try {
       await removeCredential(slot.id)
-      setExpanded(true)
+      setSecret("")
+      setExpanded(false)
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Failed to remove credential"
@@ -196,29 +217,7 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
       ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {slot.status === "unconfigured" || expanded ? (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setExpanded((value) => !value)}
-            >
-              {expanded ? "Cancel" : "Add key"}
-            </Button>
-            {slot.kind === "network_integration" && slot.status === "unconfigured" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() => void handleRemove()}
-              >
-                Dismiss
-              </Button>
-            ) : null}
-          </>
-        ) : (
+        {slot.status === "configured" && !expanded ? (
           <>
             <Button
               type="button"
@@ -238,6 +237,34 @@ function CredentialSlotRow({ slot }: CredentialSlotRowProps) {
             >
               Remove
             </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setActionError(null)
+                setExpanded((value) => !value)
+              }}
+            >
+              {expanded ? "Cancel" : "Add key"}
+            </Button>
+            {slot.kind === "network_integration" &&
+            slot.status === "unconfigured" &&
+            !expanded ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => void handleDismiss()}
+              >
+                Dismiss
+              </Button>
+            ) : null}
           </>
         )}
       </div>
@@ -333,9 +360,11 @@ export function CredentialsRegistry() {
                   on the Devices tab.
                 </p>
               ) : (
-                siteSlots.map((slot) => (
-                  <CredentialSlotRow key={slot.id} slot={slot} />
-                ))
+                <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                  {siteSlots.map((slot) => (
+                    <CredentialSlotRow key={slot.id} slot={slot} />
+                  ))}
+                </div>
               )}
             </section>
 

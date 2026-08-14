@@ -11,6 +11,14 @@ import { useDeviceInventory } from "@/context/device-inventory-context"
 import { resetHiddenDevices } from "@/hooks/use-hidden-devices"
 import { resetDeviceSiteFilter } from "@/hooks/use-device-table"
 import {
+  dedupeDiscoveredSites,
+  dismissNetworkSlot,
+  filterVisibleCredentialSlots,
+  networkIntegrationSlotId,
+  undismissNetworkSlot,
+  isDismissedNetworkSlot,
+} from "@/lib/dismissed-credential-slots"
+import {
   fetchCredentialSlots,
   removeCredential as removeCredentialRpc,
   saveCredential as saveCredentialRpc,
@@ -32,9 +40,29 @@ type CredentialsContextValue = {
   saveCredential: (request: SaveCredentialRequest) => Promise<void>
   validateCredential: (slotId: string) => Promise<void>
   removeCredential: (slotId: string) => Promise<void>
+  dismissCredentialSlot: (slotId: string) => Promise<void>
 }
 
 const CredentialsContext = createContext<CredentialsContextValue | null>(null)
+
+function dedupeCredentialSlots(slots: CredentialSlot[]): CredentialSlot[] {
+  const byId = new Map<string, CredentialSlot>()
+  for (const slot of slots) {
+    const existing = byId.get(slot.id)
+    if (!existing) {
+      byId.set(slot.id, slot)
+      continue
+    }
+    if (existing.status !== "configured" && slot.status === "configured") {
+      byId.set(slot.id, slot)
+    }
+  }
+  return Array.from(byId.values())
+}
+
+function applyVisibleSlots(slots: CredentialSlot[]): CredentialSlot[] {
+  return dedupeCredentialSlots(filterVisibleCredentialSlots(slots))
+}
 
 function upsertSlot(
   slots: CredentialSlot[],
@@ -56,7 +84,7 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
     setError(null)
     try {
       const loaded = await fetchCredentialSlots()
-      setSlots(loaded)
+      setSlots(applyVisibleSlots(loaded))
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load credentials"
@@ -72,10 +100,13 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
 
   const syncDiscoveredSites = useCallback(
     async (sites: { siteId: string; siteName: string }[]) => {
-      if (sites.length === 0) return
+      const deduped = dedupeDiscoveredSites(sites).filter(
+        (site) => !isDismissedNetworkSlot(networkIntegrationSlotId(site.siteId))
+      )
+      if (deduped.length === 0) return
       try {
-        const synced = await syncCredentialSiteSlots(sites)
-        setSlots(synced)
+        const synced = await syncCredentialSiteSlots(deduped)
+        setSlots(applyVisibleSlots(synced))
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to sync site credentials"
@@ -87,9 +118,10 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
 
   const saveCredential = useCallback(async (request: SaveCredentialRequest) => {
     setError(null)
+    undismissNetworkSlot(request.slotId)
     try {
       const updated = await saveCredentialRpc(request)
-      setSlots((prev) => upsertSlot(prev, updated))
+      setSlots((prev) => applyVisibleSlots(upsertSlot(prev, updated)))
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save credential"
@@ -107,7 +139,7 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
     )
     try {
       const updated = await validateCredentialRpc(slotId)
-      setSlots((prev) => upsertSlot(prev, updated))
+      setSlots((prev) => applyVisibleSlots(upsertSlot(prev, updated)))
     } catch (err) {
       setSlots((prev) =>
         prev.map((slot) =>
@@ -137,7 +169,8 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
           resetHiddenDevices()
         }
 
-        await reload()
+        const loaded = await fetchCredentialSlots()
+        setSlots(applyVisibleSlots(loaded))
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to remove credential"
@@ -145,8 +178,19 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
         throw err
       }
     },
-    [reload, setDevices]
+    [setDevices]
   )
+
+  const dismissCredentialSlot = useCallback(async (slotId: string) => {
+    setError(null)
+    dismissNetworkSlot(slotId)
+    try {
+      await removeCredentialRpc(slotId)
+    } catch {
+      // Placeholder rows may not exist in the backend yet.
+    }
+    setSlots((prev) => prev.filter((slot) => slot.id !== slotId))
+  }, [])
 
   const value = useMemo<CredentialsContextValue>(
     () => ({
@@ -158,6 +202,7 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
       saveCredential,
       validateCredential,
       removeCredential,
+      dismissCredentialSlot,
     }),
     [
       slots,
@@ -168,6 +213,7 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
       saveCredential,
       validateCredential,
       removeCredential,
+      dismissCredentialSlot,
     ]
   )
 
