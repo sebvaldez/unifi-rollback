@@ -11,7 +11,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ## 1. Goals
 
-- [ ] Inventory all UniFi devices across sites the user has access to (model,
+- [x] Inventory all UniFi devices across sites the user has access to (model,
       current firmware, online/adoption state).
 - [ ] Maintain a **locally-curated firmware manifest** per model/version,
       sourced from official download links and community release threads.
@@ -232,13 +232,16 @@ Keychain accounts remain as in §5.2. SQLite `credentials_meta` stores
 `label`, `last_validated_at`, `masked_suffix`, and (future) serialized
 capability list per slot id.
 
-#### Validation flow (backend — follow-up)
+#### Validation flow (backend)
 
 1. User pastes secret in Settings → **Save**.
 2. Backend probes the appropriate API (`GET /v1/sites`, `GET /v1/info`, etc.).
 3. On success: store in Keychain, upsert `credentials_meta`, return
    `capabilities[]` + `status: configured`.
 4. On failure: return `status: invalid` + error message; do not store.
+
+Site Manager save/revalidate is implemented; Network Integration per-site save
+and Classic admin probes are follow-ups.
 
 #### Settings UI
 
@@ -260,6 +263,14 @@ inventories with source label — no per-device key selection.
   API key for Lab site — configure in Settings").
 - Optional banner when inventory is partial: "N sites lack device control keys
   — [Configure in Settings]".
+- **Device table toolbar** — search, site/model/status filters, show-hidden
+  toggle; site filter persists in `localStorage`.
+- **Bulk select** — checkbox column (list + grid), bulk action bar for locate /
+  restart (when wired) and hide; partial-failure summary in error banner.
+- **Hide rows** — per-row and bulk hide persisted in `localStorage`; pruned when
+  devices leave inventory; "show hidden" recovers the view.
+- **Out-of-scope ghosts** — devices dropped from Site Manager inventory render
+  with dashed styling, scope badge, and a fleet banner when visible.
 
 #### Explicit non-goals
 
@@ -267,9 +278,10 @@ inventories with source label — no per-device key selection.
 - User-managed scope matrices.
 - Blocking the app when optional keys are missing.
 
-- [~] Frontend: credential registry UI + capability-driven device actions
-      (Wails stubs until `secrets/` + validation land).
-- [ ] Backend: Keychain CRUD, validation probes, capability derivation.
+- [x] Frontend: credential registry UI + capability-driven device actions.
+- [x] Backend: Keychain CRUD, Site Manager validation probes, capability
+      derivation, probe summary persistence.
+- [ ] Backend: Network Integration + Classic admin save/validate flows.
 
 ---
 
@@ -280,14 +292,17 @@ inventories with source label — no per-device key selection.
 | Site Manager API | `https://api.ui.com/v1` | `X-API-Key` | Fleet/site inventory, `GET /hosts`, `/sites`, `/devices` |
 | Local Network Integration API | `https://<controller>/proxy/network/integration/v1` | `X-API-Key` | Per-device firmware/version detail, `GET /sites/{id}/devices` |
 
-- [ ] Onboarding: user pastes Site Manager key → validate with a live
-      `GET /sites` call → store in Keychain → write `credentials_meta` row.
-- [ ] Repeat for local Network API key(s), one per site/controller.
-- [ ] Inventory refresh writes into `devices` table. Manual refresh (status
+- [x] Onboarding: user pastes Site Manager key → validate with a live probe
+      (`GET /sites`, hosts, devices) → store in Keychain → write
+      `credentials_meta` + serialized probe summary.
+- [~] Repeat for local Network API key(s), one per site/controller — placeholder
+      slots sync from probe; per-site save/validate not wired yet.
+- [x] Inventory refresh writes into `devices` table. Manual refresh (status
       indicator click) or opt-in polling while the app is open — not unattended
       background scheduling. Preferences: `device_refresh_mode`,
       `device_poll_interval_seconds`, `device_refresh_on_startup` (§5.1).
-      *Current branch: refresh UI + preferences only; UniFi API client deferred.*
+      Poll/startup gated on validated Site Manager key; cached inventory loads
+      on tab open when local rows exist.
 
 **No firmware-push action exists in the official API** (confirmed — neither
 surface exposes a documented "install this version" or downgrade action).
@@ -434,10 +449,12 @@ attaches `.dmg`/`.zip` to a GitHub Release automatically.
 - [x] GitHub PR template (`.github/pull_request_template.md`).
 - [x] `secrets/` package — Keychain Save / Get / Delete / ListAccounts / WipeAll (§5.2).
 - [x] Keychain dev tools UI (`wails dev` only) + typed destructive confirm dialog.
-- [ ] Production onboarding UI: validate Site Manager key → Keychain → `credentials_meta`.
-- [ ] Onboarding UI: collect + validate Network key(s), optional Claude/OpenAI keys.
-- [ ] `unifi/` client: Site Manager + Network Integration API calls.
-- [ ] Device inventory screen.
+- [x] Production onboarding UI: validate Site Manager key → Keychain → `credentials_meta`.
+- [~] Onboarding UI: collect + validate Network key(s), optional Claude/OpenAI keys.
+- [x] `unifi/` client: Site Manager + Network Integration HTTP clients, key-access
+      probe, Connector Proxy helpers.
+- [x] Device inventory screen (list/grid, polling, filters, bulk select, hide rows,
+      ghost scope).
 - [ ] `firmware/` package: domain allowlist, download, SHA256, manifest CRUD.
 - [ ] Manual mirror entry UI + verified badge rendering.
 - [ ] Tier-1 headless scrape (best-effort, optional/deferrable to later pass).
