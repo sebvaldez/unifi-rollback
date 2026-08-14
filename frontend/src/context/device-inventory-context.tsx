@@ -4,8 +4,10 @@ import {
   useContext,
   useMemo,
   useReducer,
+  useState,
   type ReactNode,
 } from "react"
+import { eligibleDevicesForAction } from "@/lib/device-bulk-actions"
 import { locateDevice as locateDeviceRpc } from "@/lib/wails-client"
 import type { Device, DeviceActionId } from "@/types/inventory"
 
@@ -61,6 +63,11 @@ type DeviceInventoryContextValue = {
     device: Device,
     actionId: DeviceActionId
   ) => Promise<void>
+  runBulkDeviceAction: (
+    devices: Device[],
+    actionId: DeviceActionId
+  ) => Promise<boolean>
+  bulkActionPending: boolean
   clearActionError: () => void
   isActionPending: (deviceId: string, actionId?: DeviceActionId) => boolean
 }
@@ -75,6 +82,7 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
     actionPending: {},
     actionError: null,
   })
+  const [bulkActionPending, setBulkActionPending] = useState(false)
 
   const setDevices = useCallback((devices: Device[]) => {
     dispatch({ type: "setDevices", devices })
@@ -113,6 +121,57 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
     []
   )
 
+  const runBulkDeviceAction = useCallback(
+    async (devices: Device[], actionId: DeviceActionId): Promise<boolean> => {
+      const eligible = eligibleDevicesForAction(devices, actionId)
+      if (eligible.length === 0) return false
+
+      setBulkActionPending(true)
+      dispatch({ type: "clearActionError" })
+
+      const errors: string[] = []
+      try {
+        for (const device of eligible) {
+          dispatch({ type: "actionStart", deviceId: device.id, actionId })
+          try {
+            switch (actionId) {
+              case "locate":
+                await locateDeviceRpc(device.siteId, device.id)
+                break
+              case "restart":
+                throw new Error("Restart is not wired yet")
+              default:
+                throw new Error("Bulk action not supported")
+            }
+          } catch (err) {
+            errors.push(
+              err instanceof Error
+                ? `${device.name}: ${err.message}`
+                : `${device.name}: action failed`
+            )
+          } finally {
+            dispatch({ type: "actionDone", deviceId: device.id })
+          }
+        }
+
+        if (errors.length > 0) {
+          const succeeded = eligible.length - errors.length
+          const summary =
+            succeeded > 0
+              ? `${succeeded} succeeded, ${errors.length} failed — ${errors[0]}`
+              : errors[0]
+          dispatch({ type: "actionError", message: summary })
+          return false
+        }
+
+        return true
+      } finally {
+        setBulkActionPending(false)
+      }
+    },
+    []
+  )
+
   const isActionPending = useCallback(
     (deviceId: string, actionId?: DeviceActionId) => {
       const pending = state.actionPending[deviceId]
@@ -129,6 +188,8 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
       actionError: state.actionError,
       setDevices,
       runDeviceAction,
+      runBulkDeviceAction,
+      bulkActionPending,
       clearActionError,
       isActionPending,
     }),
@@ -138,6 +199,8 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
       state.actionError,
       setDevices,
       runDeviceAction,
+      runBulkDeviceAction,
+      bulkActionPending,
       clearActionError,
       isActionPending,
     ]

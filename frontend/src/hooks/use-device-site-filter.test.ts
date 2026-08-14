@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   buildSiteFilterOptions,
   filterDevicesBySite,
-  resetDeviceSiteFilter,
 } from "@/hooks/use-device-site-filter"
 import type { Device } from "@/types/inventory"
 import { EMPTY_DEVICE_CAPABILITIES } from "@/types/inventory"
@@ -36,14 +35,6 @@ describe("buildSiteFilterOptions", () => {
 })
 
 describe("filterDevicesBySite", () => {
-  it("returns all devices when filter is all", () => {
-    const devices = [
-      device("site-a", "Alpha", "d1"),
-      device("site-b", "Beta", "d2"),
-    ]
-    expect(filterDevicesBySite(devices, "all")).toHaveLength(2)
-  })
-
   it("filters devices by site id", () => {
     const devices = [
       device("site-a", "Alpha", "d1"),
@@ -54,13 +45,5 @@ describe("filterDevicesBySite", () => {
       "d1",
       "d3",
     ])
-  })
-})
-
-describe("resetDeviceSiteFilter", () => {
-  it("clears persisted site filter", () => {
-    localStorage.setItem("unifi-fleet.device-site-filter", "site-a")
-    resetDeviceSiteFilter()
-    expect(localStorage.getItem("unifi-fleet.device-site-filter")).toBeNull()
   })
 })

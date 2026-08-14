@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from "react"
 import { useDeviceInventory } from "@/context/device-inventory-context"
-import { resetDeviceSiteFilter } from "@/hooks/use-device-site-filter"
+import { resetHiddenDevices } from "@/hooks/use-hidden-devices"
+import { resetDeviceSiteFilter } from "@/hooks/use-device-table"
 import {
   fetchCredentialSlots,
   removeCredential as removeCredentialRpc,
@@ -133,6 +134,7 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
         if (slotId === SITE_MANAGER_SLOT_ID) {
           setDevices([])
           resetDeviceSiteFilter()
+          resetHiddenDevices()
         }
 
         await reload()
