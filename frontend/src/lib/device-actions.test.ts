@@ -48,6 +48,24 @@ describe("getDeviceActionAvailability", () => {
     const availability = getDeviceActionAvailability(onlineDevice, "restart")
     expect(availability.enabled).toBe(true)
   })
+
+  it("disables all actions for out-of-scope ghost devices", () => {
+    const ghost = { ...onlineDevice, inScope: false }
+    for (const action of ["locate", "restart", "rollback"] as const) {
+      const availability = getDeviceActionAvailability(ghost, action)
+      expect(availability.enabled).toBe(false)
+      expect(availability.reason).toContain("scope")
+    }
+  })
+
+  it("disables restart when device is offline", () => {
+    const availability = getDeviceActionAvailability(
+      { ...onlineDevice, status: "offline" },
+      "restart"
+    )
+    expect(availability.enabled).toBe(false)
+    expect(availability.reason).toContain("online")
+  })
 })
 
 describe("mock-devices", () => {

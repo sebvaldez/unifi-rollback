@@ -36,12 +36,56 @@ export type CredentialSlot = {
   maskedSuffix?: string
   lastValidatedAt?: string
   validationError?: string
+  validationSummary?: ValidationSummary
+}
+
+export type ProbedSiteSummary = {
+  siteId: string
+  siteName: string
+  hostId?: string
+  permission?: string
+}
+
+export type ValidationSummary = {
+  sites: ProbedSiteSummary[]
+  applicationsObserved: string[]
+  hostCount: number
+  deviceCount: number
+  notes?: string[]
+}
+
+export const APPLICATION_LABELS: Record<string, string> = {
+  network: "Network",
+  protect: "Protect",
+  access: "Access",
+  talk: "Talk",
+  connect: "Connect",
+  innerspace: "InnerSpace",
 }
 
 export type SaveCredentialRequest = {
   slotId: string
   secret: string
   label?: string
+}
+
+export type CredentialValidationStepStatus =
+  | "pending"
+  | "active"
+  | "complete"
+  | "skipped"
+  | "error"
+
+export type CredentialValidationStep = {
+  label: string
+  target?: string
+  status: CredentialValidationStepStatus
+}
+
+export type CredentialValidationProgress = {
+  slotId: string
+  phase: "running" | "done" | "error"
+  steps: CredentialValidationStep[]
 }
 
 export const CREDENTIAL_CAPABILITY_LABELS: Record<CredentialCapability, string> =

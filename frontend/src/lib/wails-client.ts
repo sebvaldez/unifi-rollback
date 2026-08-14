@@ -2,17 +2,25 @@ import {
   DatabasePath,
   DatabaseReady,
   GetDeviceSettings,
+  ListCredentialSlots,
+  ListDevices,
+  RefreshInventory,
+  RemoveCredential,
+  SaveCredential,
   SaveDeviceSettings,
+  SyncCredentialSiteSlots,
+  ValidateCredential,
 } from "wailsjs/go/main/App"
-import { toDeviceSettings, toWailsDeviceSettings } from "@/lib/mappers/settings"
 import {
-  listDevCredentialSlots,
-  removeDevCredential,
-  saveDevCredential,
-  syncDevSiteCredentialSlots,
-  validateDevCredential,
-} from "@/lib/dev-credentials-store"
+  toCredentialSlot,
+  toCredentialSlots,
+  toDevices,
+  toDiscoveredSites,
+  toSaveCredentialRequest,
+} from "@/lib/mappers/inventory"
+import { toDeviceSettings, toWailsDeviceSettings } from "@/lib/mappers/settings"
 import type { CredentialSlot, SaveCredentialRequest } from "@/types/credentials"
+import type { Device } from "@/types/inventory"
 import type { DeviceSettings } from "@/types/settings"
 
 export function normalizeWailsError(err: unknown, fallback: string): string {
@@ -38,34 +46,42 @@ export async function persistDeviceSettings(
   await SaveDeviceSettings(toWailsDeviceSettings(settings))
 }
 
-/** Credential slots — dev in-memory store until Wails + Keychain backend lands. */
 export async function fetchCredentialSlots(): Promise<CredentialSlot[]> {
-  // TODO: replace with Wails ListCredentialSlots once secrets/ package lands.
-  return listDevCredentialSlots()
+  const loaded = await ListCredentialSlots()
+  return toCredentialSlots(loaded)
 }
 
 export async function saveCredential(
   request: SaveCredentialRequest
 ): Promise<CredentialSlot> {
-  // TODO: wire to Go secrets + validation probes.
-  return saveDevCredential(request)
+  const updated = await SaveCredential(toSaveCredentialRequest(request))
+  return toCredentialSlot(updated)
 }
 
 export async function validateCredential(slotId: string): Promise<CredentialSlot> {
-  // TODO: wire to Go validation probes.
-  return validateDevCredential(slotId)
+  const updated = await ValidateCredential(slotId)
+  return toCredentialSlot(updated)
 }
 
 export async function removeCredential(slotId: string): Promise<void> {
-  // TODO: wire to Go secrets removal.
-  removeDevCredential(slotId)
+  await RemoveCredential(slotId)
 }
 
 export async function syncCredentialSiteSlots(
   sites: { siteId: string; siteName: string }[]
 ): Promise<CredentialSlot[]> {
-  // TODO: wire to Go backend when site discovery lands.
-  return syncDevSiteCredentialSlots(sites)
+  const synced = await SyncCredentialSiteSlots(toDiscoveredSites(sites))
+  return toCredentialSlots(synced)
+}
+
+export async function refreshInventory(): Promise<Device[]> {
+  const loaded = await RefreshInventory()
+  return toDevices(loaded)
+}
+
+export async function listDevices(): Promise<Device[]> {
+  const loaded = await ListDevices()
+  return toDevices(loaded)
 }
 
 /** Blink device LEDs — requires Classic admin or future Integration LOCATE action. */

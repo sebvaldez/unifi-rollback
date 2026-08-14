@@ -31,7 +31,14 @@ export type Device = {
   mac?: string
   /** Optional override; otherwise resolved from model via unifi-device-icons. */
   iconUrl?: string
+  /** False when the device is no longer returned by the Site Manager API (scope reduced). */
+  inScope?: boolean
+  scopeLostAt?: string
   capabilities: DeviceCapabilities
+}
+
+export function isGhostDevice(device: Pick<Device, "inScope">): boolean {
+  return device.inScope === false
 }
 
 export type DeviceActionAvailability = {
@@ -43,7 +50,9 @@ export type DeviceActionAvailability = {
 export type InventoryPollState = {
   isRefreshing: boolean
   lastRefreshedAt: Date | null
+  refreshError: string | null
   refresh: () => Promise<void>
+  fleetReady: boolean
 }
 
 export type DeviceInventoryState = {

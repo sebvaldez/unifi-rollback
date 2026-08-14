@@ -7,7 +7,9 @@ CREATE TABLE devices (
     current_fw      TEXT,
     adoption_state  TEXT,
     last_seen       DATETIME,
-    updated_at      DATETIME
+    updated_at      DATETIME,
+    in_scope        INTEGER NOT NULL DEFAULT 1,
+    scope_lost_at   DATETIME
 );
 
 CREATE INDEX idx_devices_site_id ON devices (site_id);
@@ -36,7 +38,8 @@ CREATE TABLE credentials_meta (
     key_type          TEXT PRIMARY KEY,
     label             TEXT,
     last_validated_at DATETIME,
-    masked_suffix     TEXT
+    masked_suffix     TEXT,
+    probe_summary     TEXT
 );
 
 CREATE TABLE action_log (

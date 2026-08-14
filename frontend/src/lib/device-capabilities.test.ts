@@ -71,6 +71,13 @@ describe("resolveDeviceCapabilities", () => {
     expect(caps.restart).toBe(false)
   })
 
+  it("withholds restart when network slot is disabled", () => {
+    const caps = resolveDeviceCapabilities(baseDevice, [
+      { ...networkConfigured, enabled: false },
+    ])
+    expect(caps.restart).toBe(false)
+  })
+
   it("grants locate from classic admin credential", () => {
     const caps = resolveDeviceCapabilities(baseDevice, [classicConfigured])
     expect(caps.locate).toBe(true)
