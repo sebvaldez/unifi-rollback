@@ -90,7 +90,13 @@ WAILS_EXP_USE_WAKE=1 wails3 dev
 ```
 
 Wails 3.1 reads `wails.yaml` only when `WAILS_EXP_USE_WAKE` is set.
-The dev server listens on port 9245. `npm run dev` by itself uses port 5173.
+The dev server listens on `127.0.0.1` at the port in `WAILS_VITE_PORT` (9245
+under `wails3 dev`). `npm run dev` by itself uses port 5173.
+
+The `dev` command in `wails.yaml` passes `--host 127.0.0.1 --strictPort` on
+purpose. With a bare `npm run dev`, Wake rewrites the command into `node` plus
+mise's bash `npm` wrapper, which crashes. The extra arguments make Wake run
+`npm` directly.
 
 **Keychain dev tools** (Settings, visible only in `wails3 dev`): add test
 credentials, list account names, delete, or wipe the app namespace. Production
@@ -104,6 +110,14 @@ Keychain Access (login keychain) or restart `wails3 dev`.
 npm install
 npm run dev
 ```
+
+## AI assistant
+
+Opening the AI assistant asks for a Claude API key before chat. The key is
+stored in the macOS Keychain under account `claude-api-key` and service
+`com.wails.unifi-rollback`. The in-app link opens
+https://console.anthropic.com/settings/keys. After the key is saved, chat is
+still a placeholder.
 
 ## Building
 

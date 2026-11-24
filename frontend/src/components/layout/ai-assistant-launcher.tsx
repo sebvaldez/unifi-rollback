@@ -1,6 +1,7 @@
 import { AiAssistantSheet } from "@/components/ai/ai-assistant-sheet"
 import { Button } from "@/components/ui/button"
 import { useAiChat } from "@/hooks/use-ai-chat"
+import { useClaudeKey } from "@/hooks/use-claude-key"
 import { cn } from "@/lib/utils"
 import { Sparkles } from "lucide-react"
 import { useState } from "react"
@@ -12,6 +13,7 @@ type AiAssistantLauncherProps = {
 export function AiAssistantLauncher({ className }: AiAssistantLauncherProps) {
   const [open, setOpen] = useState(false)
   const chat = useAiChat()
+  const claudeKey = useClaudeKey(open)
 
   return (
     <>
@@ -34,7 +36,12 @@ export function AiAssistantLauncher({ className }: AiAssistantLauncherProps) {
         <span className="hidden sm:inline">AI</span>
       </Button>
 
-      <AiAssistantSheet open={open} onOpenChange={setOpen} chat={chat} />
+      <AiAssistantSheet
+        open={open}
+        onOpenChange={setOpen}
+        chat={chat}
+        claudeKey={claudeKey}
+      />
     </>
   )
 }
