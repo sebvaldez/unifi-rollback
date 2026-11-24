@@ -4,44 +4,48 @@ import (
 	"context"
 	"errors"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"unifi-rollback/internal/secrets"
 	"unifi-rollback/internal/settings"
 	"unifi-rollback/internal/store"
 	"unifi-rollback/internal/store/sqlc"
 )
 
-// App struct
+// App is the bound Wails service. It owns the SQLite store and the Keychain store.
 type App struct {
+	wails    *application.App
 	ctx      context.Context
 	store    *store.Store
 	keychain *secrets.Store
 }
 
-// NewApp creates a new App application struct
-func NewApp() *App {
-	return &App{}
+// NewApp creates the bound service. wails is used for events and is nil in tests.
+func NewApp(wails *application.App) *App {
+	return &App{wails: wails}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
-func (a *App) startup(ctx context.Context) {
+// ServiceStartup opens the local database. A database error leaves the service
+// running so DatabaseReady can report it, matching the previous startup path.
+func (a *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	a.ctx = ctx
 	a.keychain = secrets.NewStore()
 
 	s, err := store.OpenDefault()
 	if err != nil {
 		println("database error:", err.Error())
-		return
+		return nil
 	}
 	a.store = s
+	return nil
 }
 
-// shutdown closes resources opened during startup.
-func (a *App) shutdown(ctx context.Context) {
+// ServiceShutdown closes resources opened during startup.
+func (a *App) ServiceShutdown() error {
 	if a.store != nil {
 		_ = a.store.Close()
 		a.store = nil
 	}
+	return nil
 }
 
 // DatabasePath returns the path to the local SQLite database file.

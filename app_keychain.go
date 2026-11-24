@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"unifi-rollback/internal/secrets"
 )
 
@@ -18,7 +17,7 @@ func (a *App) IsDevMode() bool {
 	if a.ctx == nil {
 		return false
 	}
-	return runtime.Environment(a.ctx).BuildType == "dev"
+	return wailsDevSession()
 }
 
 func (a *App) requireDevMode() error {

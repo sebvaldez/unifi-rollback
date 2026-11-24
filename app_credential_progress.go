@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/wailsapp/wails/v2/pkg/runtime"
-)
-
 const credentialValidationProgressEvent = "credential-validation-progress"
 
 // CredentialValidationStep is one step in a credential save/validate flow.
@@ -89,10 +85,10 @@ func (t *credentialProgressTracker) probeReporter() func(label, target string) {
 }
 
 func (t *credentialProgressTracker) emit(phase string) {
-	if t.app == nil || t.app.ctx == nil {
+	if t.app == nil {
 		return
 	}
-	runtime.EventsEmit(t.app.ctx, credentialValidationProgressEvent, CredentialValidationProgressEvent{
+	t.app.emitCredentialProgress(CredentialValidationProgressEvent{
 		SlotID: t.slotID,
 		Phase:  phase,
 		Steps:  append([]CredentialValidationStep(nil), t.steps...),
@@ -100,12 +96,19 @@ func (t *credentialProgressTracker) emit(phase string) {
 }
 
 func (a *App) clearCredentialProgress(slotID string) {
-	if a == nil || a.ctx == nil {
+	if a == nil {
 		return
 	}
-	runtime.EventsEmit(a.ctx, credentialValidationProgressEvent, CredentialValidationProgressEvent{
+	a.emitCredentialProgress(CredentialValidationProgressEvent{
 		SlotID: slotID,
 		Phase:  "done",
 		Steps:  nil,
 	})
+}
+
+func (a *App) emitCredentialProgress(event CredentialValidationProgressEvent) {
+	if a.wails == nil || a.wails.Event == nil {
+		return
+	}
+	a.wails.Event.Emit(credentialValidationProgressEvent, event)
 }

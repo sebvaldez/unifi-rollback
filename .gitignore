@@ -24,6 +24,8 @@ pnpm-debug.log*
 coverage.out
 coverage.html
 /bin/
+.wails/
+.audit/
 
 # --- Environment & secrets (§11.3 — never commit credentials) ---
 .env
