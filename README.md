@@ -89,6 +89,20 @@ go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 WAILS_EXP_USE_WAKE=1 wails3 dev
 ```
 
+Run the install from inside this repo so mise uses Go 1.27.4. mise's Go puts
+`go install` binaries in that Go version's own `bin`, and a different Go (for
+example the one active in `~`) hides them. Set one stable `GOBIN` in
+`~/.config/mise/config.toml` so `wails3` survives Go version changes:
+
+```toml
+[env]
+GOBIN = "{{env.HOME}}/.local/bin"
+```
+
+`~/.local/bin` must be on your `PATH`. Delete any older `wails3` under
+`~/.local/share/mise/installs/go/*/bin/`, because those copies come first on
+`PATH`. Check with `which wails3` (expect `~/.local/bin/wails3`).
+
 Wails 3.1 reads `wails.yaml` only when `WAILS_EXP_USE_WAKE` is set.
 The dev server listens on `127.0.0.1` at the port in `WAILS_VITE_PORT` (9245
 under `wails3 dev`). `npm run dev` by itself uses port 5173.
