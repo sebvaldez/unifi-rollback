@@ -116,3 +116,40 @@ func TestMergeFleetInventory_AdoptingWhenUnmanaged(t *testing.T) {
 		t.Fatalf("Status = %q, want adopting", devices[0].Status)
 	}
 }
+
+func TestConsoleIPsBySite(t *testing.T) {
+	t.Parallel()
+
+	sites := []unifi.Site{
+		{SiteID: "site-a", HostID: "host-a"},
+		{SiteID: "site-b", HostID: "host-b"},
+	}
+	hosts := []unifi.Host{
+		{ID: "host-a", IPAddress: " 203.0.113.7 "},
+		{ID: "host-b"},
+	}
+	groups := []unifi.HostDeviceGroup{
+		{HostID: "host-a", Devices: []unifi.SiteManagerDevice{{IsConsole: true, IP: "10.0.0.1"}}},
+		{HostID: "host-b", Devices: []unifi.SiteManagerDevice{
+			{IsConsole: false, IP: "10.1.0.50"},
+			{IsConsole: true, IP: "10.1.0.1"},
+		}},
+		{HostID: "host-no-site", Devices: []unifi.SiteManagerDevice{{IsConsole: true, IP: "10.2.0.1"}}},
+		{HostID: "host-empty", Devices: []unifi.SiteManagerDevice{{IsConsole: true}}},
+	}
+
+	got := inventory.ConsoleIPsBySite(sites, hosts, groups)
+	want := map[string]string{
+		"site-a":       "203.0.113.7",
+		"site-b":       "10.1.0.1",
+		"host-no-site": "10.2.0.1",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ConsoleIPsBySite() = %v, want %v", got, want)
+	}
+	for siteID, ip := range want {
+		if got[siteID] != ip {
+			t.Fatalf("ConsoleIPsBySite()[%q] = %q, want %q", siteID, got[siteID], ip)
+		}
+	}
+}

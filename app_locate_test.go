@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"unifi-rollback/internal/inventory"
 	"unifi-rollback/internal/secrets"
 	"unifi-rollback/internal/store"
 	"unifi-rollback/internal/store/sqlc"
@@ -421,5 +422,175 @@ func TestConsoleBaseURLFromIP(t *testing.T) {
 		if got := consoleBaseURLFromIP(tc.ip); got != tc.want {
 			t.Errorf("consoleBaseURLFromIP(%q) = %q, want %q", tc.ip, got, tc.want)
 		}
+	}
+}
+
+func TestLocateDevice_UsesStoredConsoleIPWithoutHostLookup(t *testing.T) {
+	locateCalled := false
+	consoleMux := http.NewServeMux()
+	consoleMux.HandleFunc("/api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("x-csrf-token", "csrf-1")
+		_ = json.NewEncoder(w).Encode(map[string]any{"meta": map[string]string{"rc": "ok"}})
+	})
+	consoleMux.HandleFunc("/proxy/network/api/s/default/cmd/devmgr", func(w http.ResponseWriter, r *http.Request) {
+		locateCalled = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"meta": map[string]string{"rc": "ok"}})
+	})
+	consoleSrv := httptest.NewTLSServer(consoleMux)
+	t.Cleanup(consoleSrv.Close)
+	consoleHostPort := strings.TrimPrefix(consoleSrv.URL, "https://")
+
+	smSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected Site Manager call %s %s", r.Method, r.URL.Path)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
+	t.Cleanup(smSrv.Close)
+
+	s := openTestStoreWithDevice(t, "site-home", "dev-1", "aa:bb:cc:dd:ee:01")
+	err := s.Queries().UpsertPreference(context.Background(), sqlc.UpsertPreferenceParams{
+		Key:   inventory.ConsoleIPKey("site-home"),
+		Value: consoleHostPort,
+	})
+	if err != nil {
+		t.Fatalf("UpsertPreference() error = %v", err)
+	}
+
+	keychainReads := 0
+	err = locateDevice(
+		context.Background(),
+		locateDeps{
+			queries: s.Queries(),
+			siteManager: func() (*unifi.SiteManagerClient, error) {
+				keychainReads++
+				return unifi.NewSiteManagerClientWithBase(smSrv.URL+"/v1", "key", smSrv.Client()), nil
+			},
+			classicClient: unifi.NewClassicClientForLocalConsole,
+		},
+		"site-home",
+		"dev-1",
+	)
+	if err != nil {
+		t.Fatalf("locateDevice() error = %v", err)
+	}
+	if !locateCalled {
+		t.Fatal("set-locate was not sent to the console")
+	}
+	if keychainReads != 0 {
+		t.Fatalf("Site Manager secret read %d times, want 0 when the console IP is stored", keychainReads)
+	}
+}
+
+func TestLocateDevice_HostLookup401KeepsErrorAndReadsSecretOnce(t *testing.T) {
+	var hostCalls int
+	smMux := http.NewServeMux()
+	smMux.HandleFunc("/v1/sites", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"siteId": "site-home", "hostId": "host-1"}},
+		})
+	})
+	smMux.HandleFunc("/v1/hosts/host-1", func(w http.ResponseWriter, r *http.Request) {
+		hostCalls++
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"code":"unauthorized","httpStatusCode":401}`))
+	})
+	smSrv := httptest.NewServer(smMux)
+	t.Cleanup(smSrv.Close)
+
+	s := openTestStoreWithDevice(t, "site-home", "dev-1", "aa:bb:cc:dd:ee:01")
+	keychainReads := 0
+	err := locateDevice(
+		context.Background(),
+		locateDeps{
+			queries: s.Queries(),
+			siteManager: func() (*unifi.SiteManagerClient, error) {
+				keychainReads++
+				return unifi.NewSiteManagerClientWithBase(smSrv.URL+"/v1", "key", smSrv.Client()), nil
+			},
+			classicClient: unifi.NewClassicClientForLocalConsole,
+		},
+		"site-home",
+		"dev-1",
+	)
+	if !unifi.IsHTTPStatus(err, http.StatusUnauthorized) {
+		t.Fatalf("locateDevice() error = %v, want wrapped HTTP 401", err)
+	}
+	if want := "GET hosts/host-1: HTTP 401"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("locateDevice() error = %q, want it to contain %q", err.Error(), want)
+	}
+	if hostCalls != 1 || keychainReads != 1 {
+		t.Fatalf("hostCalls = %d, keychainReads = %d, want 1 and 1", hostCalls, keychainReads)
+	}
+}
+
+func TestLocateDevice_FleetRefreshStoresConsoleIPSoLocateSkipsHostLookup(t *testing.T) {
+	locateCalled := false
+	consoleMux := http.NewServeMux()
+	consoleMux.HandleFunc("/api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("x-csrf-token", "csrf-1")
+		_ = json.NewEncoder(w).Encode(map[string]any{"meta": map[string]string{"rc": "ok"}})
+	})
+	consoleMux.HandleFunc("/proxy/network/api/s/default/cmd/devmgr", func(w http.ResponseWriter, r *http.Request) {
+		locateCalled = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"meta": map[string]string{"rc": "ok"}})
+	})
+	consoleSrv := httptest.NewTLSServer(consoleMux)
+	t.Cleanup(consoleSrv.Close)
+	consoleHostPort := strings.TrimPrefix(consoleSrv.URL, "https://")
+
+	smMux := http.NewServeMux()
+	smMux.HandleFunc("/v1/sites", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"siteId": "site-home", "hostId": "host-1"}},
+		})
+	})
+	smMux.HandleFunc("/v1/hosts", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"id": "host-1", "ipAddress": consoleHostPort}},
+		})
+	})
+	smMux.HandleFunc("/v1/devices", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{
+				"hostId": "host-1",
+				"devices": []map[string]any{{
+					"id": "dev-1", "mac": "aa:bb:cc:dd:ee:01", "name": "Hall AP",
+					"model": "U7-Pro-XGS", "status": "online", "isManaged": true,
+				}},
+			}},
+		})
+	})
+	smMux.HandleFunc("/v1/hosts/host-1", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("locate must not call GET /v1/hosts/{id} after a refresh stored the console IP")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+	smSrv := httptest.NewServer(smMux)
+	t.Cleanup(smSrv.Close)
+
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	sm := unifi.NewSiteManagerClientWithBase(smSrv.URL+"/v1", "key", smSrv.Client())
+	if _, err := inventory.NewService(sm).RefreshFromSiteManager(context.Background(), s.Queries()); err != nil {
+		t.Fatalf("RefreshFromSiteManager() error = %v", err)
+	}
+
+	err = locateDevice(
+		context.Background(),
+		locateDeps{
+			queries:       s.Queries(),
+			siteManager:   func() (*unifi.SiteManagerClient, error) { return sm, nil },
+			classicClient: unifi.NewClassicClientForLocalConsole,
+		},
+		"site-home",
+		"dev-1",
+	)
+	if err != nil {
+		t.Fatalf("locateDevice() error = %v", err)
+	}
+	if !locateCalled {
+		t.Fatal("set-locate was not sent to the console")
 	}
 }

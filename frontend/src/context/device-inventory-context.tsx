@@ -4,9 +4,18 @@ import {
   useContext,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
+import {
+  describeLocateFailure,
+  LOCATE_OK_OPERATION,
+  LOCATE_PENDING_OPERATION,
+  prependLogEntry,
+  updateLogEntry,
+  type ActionLogEntry,
+} from "@/lib/action-debug-log"
 import { eligibleDevicesForAction } from "@/lib/device-bulk-actions"
 import { locateDevice as locateDeviceRpc } from "@/lib/wails-client"
 import { formatWailsError } from "@/lib/wails-error"
@@ -16,6 +25,7 @@ type DeviceInventoryState = {
   devices: Device[]
   actionPending: Partial<Record<string, DeviceActionId>>
   actionError: string | null
+  actionLog: ActionLogEntry[]
 }
 
 type DeviceInventoryAction =
@@ -24,6 +34,9 @@ type DeviceInventoryAction =
   | { type: "actionDone"; deviceId: string }
   | { type: "actionError"; message: string }
   | { type: "clearActionError" }
+  | { type: "logStart"; entry: ActionLogEntry }
+  | { type: "logFinish"; id: number; patch: Partial<ActionLogEntry> }
+  | { type: "logClear" }
 
 function deviceInventoryReducer(
   state: DeviceInventoryState,
@@ -50,6 +63,15 @@ function deviceInventoryReducer(
       return { ...state, actionError: action.message, actionPending: {} }
     case "clearActionError":
       return { ...state, actionError: null }
+    case "logStart":
+      return { ...state, actionLog: prependLogEntry(state.actionLog, action.entry) }
+    case "logFinish":
+      return {
+        ...state,
+        actionLog: updateLogEntry(state.actionLog, action.id, action.patch),
+      }
+    case "logClear":
+      return { ...state, actionLog: [] }
     default:
       return state
   }
@@ -59,6 +81,8 @@ type DeviceInventoryContextValue = {
   devices: Device[]
   actionPending: Partial<Record<string, DeviceActionId>>
   actionError: string | null
+  actionLog: ActionLogEntry[]
+  clearActionLog: () => void
   setDevices: (devices: Device[]) => void
   runDeviceAction: (
     device: Device,
@@ -82,7 +106,9 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
     devices: [],
     actionPending: {},
     actionError: null,
+    actionLog: [],
   })
+  const nextLogId = useRef(1)
   const [bulkActionPending, setBulkActionPending] = useState(false)
 
   const setDevices = useCallback((devices: Device[]) => {
@@ -93,13 +119,47 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "clearActionError" })
   }, [])
 
+  const clearActionLog = useCallback(() => {
+    dispatch({ type: "logClear" })
+  }, [])
+
+  const locateWithLog = useCallback(async (device: Device) => {
+    const id = nextLogId.current++
+    dispatch({
+      type: "logStart",
+      entry: {
+        id,
+        at: Date.now(),
+        action: "locate",
+        deviceName: device.name,
+        operation: LOCATE_PENDING_OPERATION,
+        outcome: "pending",
+      },
+    })
+    try {
+      await locateDeviceRpc(device.siteId, device.id)
+      dispatch({
+        type: "logFinish",
+        id,
+        patch: { outcome: "ok", operation: LOCATE_OK_OPERATION },
+      })
+    } catch (err) {
+      dispatch({
+        type: "logFinish",
+        id,
+        patch: describeLocateFailure(formatWailsError(err, "Device action failed")),
+      })
+      throw err
+    }
+  }, [])
+
   const runDeviceAction = useCallback(
     async (device: Device, actionId: DeviceActionId) => {
       dispatch({ type: "actionStart", deviceId: device.id, actionId })
       try {
         switch (actionId) {
           case "locate":
-            await locateDeviceRpc(device.siteId, device.id)
+            await locateWithLog(device)
             break
           case "restart":
             throw new Error("Restart is not wired yet")
@@ -118,7 +178,7 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "actionDone", deviceId: device.id })
       }
     },
-    []
+    [locateWithLog]
   )
 
   const runBulkDeviceAction = useCallback(
@@ -136,7 +196,7 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
           try {
             switch (actionId) {
               case "locate":
-                await locateDeviceRpc(device.siteId, device.id)
+                await locateWithLog(device)
                 break
               case "restart":
                 throw new Error("Restart is not wired yet")
@@ -167,7 +227,7 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
         setBulkActionPending(false)
       }
     },
-    []
+    [locateWithLog]
   )
 
   const isActionPending = useCallback(
@@ -184,6 +244,8 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
       devices: state.devices,
       actionPending: state.actionPending,
       actionError: state.actionError,
+      actionLog: state.actionLog,
+      clearActionLog,
       setDevices,
       runDeviceAction,
       runBulkDeviceAction,
@@ -195,6 +257,8 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
       state.devices,
       state.actionPending,
       state.actionError,
+      state.actionLog,
+      clearActionLog,
       setDevices,
       runDeviceAction,
       runBulkDeviceAction,

@@ -51,6 +51,10 @@ func (s *Service) RefreshFromSiteManager(ctx context.Context, q *sqlc.Queries) (
 	activeDevices := MergeFleetInventory(sites, hosts, groups)
 	now := time.Now().UTC()
 
+	if err := saveConsoleIPs(ctx, q, ConsoleIPsBySite(sites, hosts, groups), now); err != nil {
+		return nil, err
+	}
+
 	activeByID := make(map[string]Device, len(activeDevices))
 	activeIDs := make(map[string]struct{}, len(activeDevices))
 	for _, device := range activeDevices {
@@ -118,15 +122,7 @@ func ListFromDB(ctx context.Context, q *sqlc.Queries) ([]Device, error) {
 // MergeFleetInventory joins Site Manager sites, hosts, and host-grouped devices.
 // When a host has multiple Network sites, the first site wins (v1 limitation).
 func MergeFleetInventory(sites []unifi.Site, hosts []unifi.Host, groups []unifi.HostDeviceGroup) []Device {
-	hostSite := make(map[string]unifi.Site, len(sites))
-	for _, site := range sites {
-		if site.HostID == "" {
-			continue
-		}
-		if _, exists := hostSite[site.HostID]; !exists {
-			hostSite[site.HostID] = site
-		}
-	}
+	hostSite := indexSitesByHost(sites)
 
 	hostLabels := make(map[string]string, len(hosts))
 	for _, host := range hosts {
@@ -138,12 +134,7 @@ func MergeFleetInventory(sites []unifi.Site, hosts []unifi.Host, groups []unifi.
 	var devices []Device
 	for _, group := range groups {
 		site, ok := hostSite[group.HostID]
-		siteID := ""
-		if ok {
-			siteID = site.SiteID
-		} else if siteID == "" {
-			siteID = group.HostID
-		}
+		siteID := siteIDForGroup(hostSite, group)
 
 		siteName := resolveSiteName(group, site, ok, hostLabels)
 
