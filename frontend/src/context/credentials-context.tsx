@@ -32,7 +32,7 @@ import type {
   CredentialValidationProgress,
   SaveCredentialRequest,
 } from "@/types/credentials"
-import { EventsOn } from "wailsjs/runtime/runtime"
+import { Events } from "@wailsio/runtime"
 
 const SITE_MANAGER_SLOT_ID = "site-manager-primary"
 
@@ -138,9 +138,10 @@ export function CredentialsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = EventsOn(
+    const unsubscribe = Events.On(
       CREDENTIAL_VALIDATION_PROGRESS_EVENT,
-      (payload: CredentialValidationProgress) => {
+      (event) => {
+        const payload = event.data as CredentialValidationProgress | undefined
         if (!payload?.slotId) return
         setValidationProgressBySlotId((prev) => {
           if (payload.phase === "done" && payload.steps.length === 0) {

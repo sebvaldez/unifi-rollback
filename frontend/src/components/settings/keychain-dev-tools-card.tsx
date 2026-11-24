@@ -27,8 +27,8 @@ import {
   DevKeychainSave,
   DevKeychainWipeAll,
   IsDevMode,
-} from "../../../wailsjs/go/main/App"
-import { main } from "../../../wailsjs/go/models"
+} from "bindings/unifi-rollback/app"
+import { CredentialEntry } from "bindings/unifi-rollback/models"
 
 type KeychainDevToolsCardProps = {
   className?: string
@@ -41,7 +41,7 @@ type RefreshOptions = {
 export function KeychainDevToolsCard({ className }: KeychainDevToolsCardProps) {
   const { requestConfirm, confirmDialog } = useTypedConfirm()
   const [devMode, setDevMode] = useState<boolean | null>(null)
-  const [entries, setEntries] = useState<main.CredentialEntry[]>([])
+  const [entries, setEntries] = useState<CredentialEntry[]>([])
   const [accountPreset, setAccountPreset] = useState<string>(
     KEYCHAIN_KNOWN_ACCOUNTS[0]
   )
@@ -213,7 +213,7 @@ export function KeychainDevToolsCard({ className }: KeychainDevToolsCardProps) {
             Development builds only. Add test credentials, verify round-trip
             storage, and wipe the app namespace clean. If list/wipe fail after a
             rebuild, delete the item manually in Keychain Access (login keychain)
-            or restart <code className="text-xs">wails dev</code> and try again.
+            or restart <code className="text-xs">wails3 dev</code> and try again.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

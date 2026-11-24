@@ -1,10 +1,19 @@
-import { inventory, main } from "wailsjs/go/models"
+import {
+  Device as WailsDevice,
+  DeviceCapabilities as WailsDeviceCapabilities,
+} from "bindings/unifi-rollback/internal/inventory/models"
+import {
+  CredentialSlot as WailsCredentialSlot,
+  DiscoveredSite,
+  SaveCredentialRequest as WailsSaveCredentialRequest,
+  ValidationSummary as WailsValidationSummary,
+} from "bindings/unifi-rollback/models"
 import type { CredentialSlot, CredentialCapability, CredentialSlotKind, SaveCredentialRequest } from "@/types/credentials"
 import type { Device, DeviceCapabilities, DeviceStatus } from "@/types/inventory"
 import { EMPTY_DEVICE_CAPABILITIES } from "@/types/inventory"
 
 function mapCapabilities(
-  caps: inventory.DeviceCapabilities | undefined
+  caps: WailsDeviceCapabilities | undefined
 ): DeviceCapabilities {
   if (!caps) {
     return { ...EMPTY_DEVICE_CAPABILITIES }
@@ -26,7 +35,7 @@ function isDeviceStatus(value: string): value is DeviceStatus {
   )
 }
 
-export function toDevice(model: inventory.Device): Device {
+export function toDevice(model: WailsDevice): Device {
   return {
     id: model.id,
     siteId: model.siteId,
@@ -43,11 +52,11 @@ export function toDevice(model: inventory.Device): Device {
   }
 }
 
-export function toDevices(models: inventory.Device[]): Device[] {
+export function toDevices(models: WailsDevice[]): Device[] {
   return models.map(toDevice)
 }
 
-export function toCredentialSlot(model: main.CredentialSlot): CredentialSlot {
+export function toCredentialSlot(model: WailsCredentialSlot): CredentialSlot {
   return {
     id: model.id,
     kind: model.kind as CredentialSlotKind,
@@ -68,7 +77,7 @@ export function toCredentialSlot(model: main.CredentialSlot): CredentialSlot {
 }
 
 function toValidationSummary(
-  model: main.ValidationSummary
+  model: WailsValidationSummary
 ): import("@/types/credentials").ValidationSummary {
   return {
     sites: (model.sites ?? []).map((site) => ({
@@ -84,14 +93,14 @@ function toValidationSummary(
   }
 }
 
-export function toCredentialSlots(models: main.CredentialSlot[]): CredentialSlot[] {
+export function toCredentialSlots(models: WailsCredentialSlot[]): CredentialSlot[] {
   return models.map(toCredentialSlot)
 }
 
 export function toSaveCredentialRequest(
   request: SaveCredentialRequest
-): main.SaveCredentialRequest {
-  return main.SaveCredentialRequest.createFrom({
+): WailsSaveCredentialRequest {
+  return WailsSaveCredentialRequest.createFrom({
     slotId: request.slotId,
     secret: request.secret,
     label: request.label,
@@ -100,9 +109,9 @@ export function toSaveCredentialRequest(
 
 export function toDiscoveredSites(
   sites: { siteId: string; siteName: string }[]
-): main.DiscoveredSite[] {
+): DiscoveredSite[] {
   return sites.map((site) =>
-    main.DiscoveredSite.createFrom({
+    DiscoveredSite.createFrom({
       siteId: site.siteId,
       siteName: site.siteName,
     })

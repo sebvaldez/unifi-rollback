@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://v3.wails.io/schemas/wails.v3.json
+version: 3
+project:
+  name: unifi-rollback
+  product_name: UniFi Fleet Firmware Manager
+  identifier: com.wails.unifi-rollback
+  version: 0.1.0
+  binary_name: unifi-rollback
+frontend:
+  directory: frontend
+  install: [npm, install]
+  build: [npm, run, build]
+  dev: [npm, run, dev]
+  output: frontend/dist
+  bindings:
+    typescript: true
+    interfaces: false
+    output: bindings
+darwin:
+  info_plist: build/darwin/Info.plist
+  minimum_version: "10.13"

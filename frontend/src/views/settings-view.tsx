@@ -25,7 +25,7 @@ import {
   type SettingsSectionId,
 } from "@/types/settings-navigation"
 import { useCallback, useEffect, useState } from "react"
-import { IsDevMode } from "../../wailsjs/go/main/App"
+import { IsDevMode } from "bindings/unifi-rollback/app"
 
 function AppearanceSettings() {
   const { preference, resolvedTheme } = useTheme()
