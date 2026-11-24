@@ -15,6 +15,9 @@ export function resolveDeviceCapabilities(
   )
   if (siteManager) {
     caps.inventory = siteManager.capabilities.includes("inventory")
+    if (online) {
+      caps.locate = true
+    }
   }
 
   const network = slots.find(
@@ -35,7 +38,7 @@ export function resolveDeviceCapabilities(
       s.status === "configured" &&
       (!s.boundSiteId || s.boundSiteId === device.siteId)
   )
-  if (classic && online) {
+  if (!caps.locate && classic && online) {
     caps.locate = classic.capabilities.includes("device_locate")
   }
 

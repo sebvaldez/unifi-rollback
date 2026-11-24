@@ -5,6 +5,7 @@ import {
   GetDeviceSettings,
   ListCredentialSlots,
   ListDevices,
+  LocateDevice,
   RefreshInventory,
   RemoveCredential,
   SaveClaudeKey,
@@ -94,14 +95,10 @@ export async function listDevices(): Promise<Device[]> {
   return toDevices(loaded ?? [])
 }
 
-/** Blink device LEDs — requires Classic admin or future Integration LOCATE action. */
+/** Blink device LEDs via the console's classic API (factory ubnt login). */
 export async function locateDevice(
   siteId: string,
   deviceId: string
 ): Promise<void> {
-  void siteId
-  void deviceId
-  throw new Error(
-    "Locate is not available until credentials and unifi client are connected"
-  )
+  await LocateDevice(siteId, deviceId)
 }

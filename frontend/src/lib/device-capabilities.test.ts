@@ -52,10 +52,26 @@ const classicConfigured: CredentialSlot = {
 }
 
 describe("resolveDeviceCapabilities", () => {
-  it("grants inventory from configured site manager", () => {
+  it("grants inventory and locate from configured site manager when online", () => {
     const caps = resolveDeviceCapabilities(baseDevice, [siteManagerConfigured])
     expect(caps.inventory).toBe(true)
+    expect(caps.locate).toBe(true)
     expect(caps.restart).toBe(false)
+  })
+
+  it("withholds locate when device is offline", () => {
+    const caps = resolveDeviceCapabilities(
+      { ...baseDevice, status: "offline" },
+      [siteManagerConfigured]
+    )
+    expect(caps.locate).toBe(false)
+  })
+
+  it("withholds locate when site manager is unconfigured", () => {
+    const caps = resolveDeviceCapabilities(baseDevice, [
+      { ...siteManagerConfigured, status: "unconfigured" },
+    ])
+    expect(caps.locate).toBe(false)
   })
 
   it("grants restart from per-site network integration when online", () => {

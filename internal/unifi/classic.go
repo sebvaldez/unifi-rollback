@@ -3,7 +3,9 @@ package unifi
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,15 @@ import (
 	"sync"
 	"time"
 )
+
+var (
+	// ErrClassicLoginRefused is returned when the console rejects classic login credentials.
+	ErrClassicLoginRefused = errors.New("classic login refused")
+	// ErrClassicCommandRefused is returned when the console rejects a classic controller command.
+	ErrClassicCommandRefused = errors.New("classic command refused")
+)
+
+const maxClassicResponseBytes = 1 << 20
 
 // ClassicClient calls the legacy UniFi controller API (cookie + CSRF auth).
 //
@@ -58,8 +69,8 @@ func NewClassicClient(cfg ClassicConfig) (*ClassicClient, error) {
 		site = "default"
 	}
 
-	httpClient := cfg.HTTP
-	if httpClient == nil {
+	var httpClient *http.Client
+	if cfg.HTTP == nil {
 		jar, err := cookiejar.New(nil)
 		if err != nil {
 			return nil, fmt.Errorf("create cookie jar: %w", err)
@@ -68,6 +79,16 @@ func NewClassicClient(cfg ClassicConfig) (*ClassicClient, error) {
 			Jar:     jar,
 			Timeout: 30 * time.Second,
 		}
+	} else {
+		cloned := *cfg.HTTP
+		if cloned.Jar == nil {
+			jar, err := cookiejar.New(nil)
+			if err != nil {
+				return nil, fmt.Errorf("create cookie jar: %w", err)
+			}
+			cloned.Jar = jar
+		}
+		httpClient = &cloned
 	}
 
 	return &ClassicClient{
@@ -77,6 +98,25 @@ func NewClassicClient(cfg ClassicConfig) (*ClassicClient, error) {
 		site:     site,
 		http:     httpClient,
 	}, nil
+}
+
+// NewClassicClientForLocalConsole creates a ClassicClient that dials a LAN console
+// with a self-signed TLS certificate and an in-memory cookie jar.
+func NewClassicClientForLocalConsole(cfg ClassicConfig) (*ClassicClient, error) {
+	if cfg.HTTP == nil {
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			return nil, fmt.Errorf("create cookie jar: %w", err)
+		}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // local UniFi consoles use self-signed certs
+		cfg.HTTP = &http.Client{
+			Jar:       jar,
+			Transport: transport,
+			Timeout:   30 * time.Second,
+		}
+	}
+	return NewClassicClient(cfg)
 }
 
 type classicLoginRequest struct {
@@ -94,34 +134,53 @@ type classicEnvelope struct {
 	Meta classicMeta `json:"meta"`
 }
 
-func (c *ClassicClient) ensureLogin(ctx context.Context) error {
+func (c *ClassicClient) ensureLogin(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.csrfToken != "" && time.Since(c.loggedInAt) < 25*time.Minute {
-		return nil
+		return c.csrfToken, nil
 	}
 
-	body, _ := json.Marshal(classicLoginRequest{
+	body, err := json.Marshal(classicLoginRequest{
 		Username: c.username,
 		Password: c.password,
 		Remember: true,
 	})
+	if err != nil {
+		return "", fmt.Errorf("classic login encode: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/auth/login", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("classic login: %w", err)
+		return "", fmt.Errorf("classic login: %w", err)
 	}
 	defer resp.Body.Close()
 
-	raw, _ := io.ReadAll(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxClassicResponseBytes))
+	if err != nil {
+		return "", fmt.Errorf("classic login read: %w", err)
+	}
+	if resp.StatusCode == http.StatusBadRequest ||
+		resp.StatusCode == http.StatusUnauthorized ||
+		resp.StatusCode == http.StatusForbidden {
+		return "", fmt.Errorf("%w: HTTP %d", ErrClassicLoginRefused, resp.StatusCode)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("classic login: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		return "", fmt.Errorf("classic login: HTTP %d", resp.StatusCode)
+	}
+
+	var env classicEnvelope
+	if err := json.Unmarshal(raw, &env); err == nil && env.Meta.RC != "" && env.Meta.RC != "ok" {
+		if env.Meta.Msg != "" {
+			return "", fmt.Errorf("%w: %s", ErrClassicLoginRefused, env.Meta.Msg)
+		}
+		return "", fmt.Errorf("%w: rc=%q", ErrClassicLoginRefused, env.Meta.RC)
 	}
 
 	csrf := resp.Header.Get("x-csrf-token")
@@ -129,21 +188,17 @@ func (c *ClassicClient) ensureLogin(ctx context.Context) error {
 		csrf = resp.Header.Get("x-updated-csrf-token")
 	}
 	if csrf == "" {
-		return fmt.Errorf("classic login: missing CSRF token in response headers")
-	}
-
-	var env classicEnvelope
-	if err := json.Unmarshal(raw, &env); err == nil && env.Meta.RC != "" && env.Meta.RC != "ok" {
-		return fmt.Errorf("classic login: %s", env.Meta.Msg)
+		return "", fmt.Errorf("classic login: missing CSRF token in response headers")
 	}
 
 	c.csrfToken = csrf
 	c.loggedInAt = time.Now()
-	return nil
+	return csrf, nil
 }
 
 func (c *ClassicClient) postDevmgr(ctx context.Context, payload map[string]any) error {
-	if err := c.ensureLogin(ctx); err != nil {
+	csrf, err := c.ensureLogin(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -158,7 +213,7 @@ func (c *ClassicClient) postDevmgr(ctx context.Context, payload map[string]any) 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-CSRF-Token", c.csrfToken)
+	req.Header.Set("X-CSRF-Token", csrf)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -166,20 +221,29 @@ func (c *ClassicClient) postDevmgr(ctx context.Context, payload map[string]any) 
 	}
 	defer resp.Body.Close()
 
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("classic devmgr: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxClassicResponseBytes))
+	if err != nil {
+		return fmt.Errorf("classic devmgr read: %w", err)
 	}
 
 	var env classicEnvelope
-	if err := json.Unmarshal(raw, &env); err != nil {
-		return fmt.Errorf("classic devmgr decode: %w", err)
+	decoded := json.Unmarshal(raw, &env) == nil
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if decoded && env.Meta.Msg != "" {
+			return fmt.Errorf("%w: HTTP %d (%s)", ErrClassicCommandRefused, resp.StatusCode, env.Meta.Msg)
+		}
+		return fmt.Errorf("%w: HTTP %d", ErrClassicCommandRefused, resp.StatusCode)
+	}
+
+	if !decoded {
+		return fmt.Errorf("classic devmgr decode: invalid JSON response")
 	}
 	if env.Meta.RC != "ok" {
 		if env.Meta.Msg != "" {
-			return fmt.Errorf("classic devmgr: %s", env.Meta.Msg)
+			return fmt.Errorf("%w: %s", ErrClassicCommandRefused, env.Meta.Msg)
 		}
-		return fmt.Errorf("classic devmgr: rc=%q", env.Meta.RC)
+		return fmt.Errorf("%w: rc=%q", ErrClassicCommandRefused, env.Meta.RC)
 	}
 	return nil
 }

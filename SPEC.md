@@ -265,8 +265,9 @@ inventories with source label — no per-device key selection.
   — [Configure in Settings]".
 - **Device table toolbar** — search, site/model/status filters, show-hidden
   toggle; site filter persists in `localStorage`.
-- **Bulk select** — checkbox column (list + grid), bulk action bar for locate /
-  restart (when wired) and hide; partial-failure summary in error banner.
+- **Bulk select** — checkbox column (list + grid), bulk action bar for locate
+  (factory `ubnt` classic login via console IP), restart (when wired), and hide;
+  partial-failure summary in error banner.
 - **Hide rows** — per-row and bulk hide persisted in `localStorage`; pruned when
   devices leave inventory; "show hidden" recovers the view.
 - **Out-of-scope ghosts** — devices dropped from Site Manager inventory render
