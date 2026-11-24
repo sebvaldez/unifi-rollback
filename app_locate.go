@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"unifi-rollback/internal/inventory"
 	"unifi-rollback/internal/secrets"
 	"unifi-rollback/internal/store/sqlc"
 	"unifi-rollback/internal/unifi"
@@ -61,14 +62,6 @@ func (a *App) LocateDevice(siteID, deviceID string) error {
 }
 
 func locateDevice(ctx context.Context, deps locateDeps, siteID, deviceID string) error {
-	sm, err := deps.siteManager()
-	if errors.Is(err, secrets.ErrNotFound) {
-		return ErrLocateNoSiteManagerKey
-	}
-	if err != nil {
-		return err
-	}
-
 	deviceID = strings.TrimSpace(deviceID)
 	if deviceID == "" {
 		return errors.New("device ID is required")
@@ -89,9 +82,22 @@ func locateDevice(ctx context.Context, deps locateDeps, siteID, deviceID string)
 		effectiveSiteID = strings.TrimSpace(siteID)
 	}
 
-	consoleIP, err := resolveConsoleIPForSite(ctx, deps.queries, sm, effectiveSiteID)
+	consoleIP, err := inventory.StoredConsoleIP(ctx, deps.queries, effectiveSiteID)
 	if err != nil {
 		return err
+	}
+	if consoleIP == "" {
+		sm, err := deps.siteManager()
+		if errors.Is(err, secrets.ErrNotFound) {
+			return ErrLocateNoSiteManagerKey
+		}
+		if err != nil {
+			return err
+		}
+		consoleIP, err = resolveConsoleIPForSite(ctx, deps.queries, sm, effectiveSiteID)
+		if err != nil {
+			return err
+		}
 	}
 
 	client, err := deps.classicClient(unifi.ClassicConfig{

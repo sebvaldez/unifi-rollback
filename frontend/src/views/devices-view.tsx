@@ -1,3 +1,4 @@
+import { ActionDebugSheet } from "@/components/devices/action-debug-sheet"
 import { DeviceEmptyState } from "@/components/devices/device-empty-state"
 import { DevInventoryToolbar } from "@/components/devices/dev-inventory-toolbar"
 import { DeviceBulkActionBar } from "@/components/devices/device-bulk-action-bar"
@@ -91,9 +92,12 @@ export function DevicesView({ isRefreshing, onOpenSettings }: DevicesViewProps) 
               credentials in Settings grant the required capabilities.
             </CardDescription>
           </div>
-          {hasDevices ? (
-            <DeviceViewToggle mode={viewMode} onChange={setViewMode} />
-          ) : null}
+          <div className="flex items-center gap-2">
+            <ActionDebugSheet />
+            {hasDevices ? (
+              <DeviceViewToggle mode={viewMode} onChange={setViewMode} />
+            ) : null}
+          </div>
         </div>
       </CardHeader>
 
