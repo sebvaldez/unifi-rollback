@@ -9,6 +9,7 @@ import {
 } from "react"
 import { eligibleDevicesForAction } from "@/lib/device-bulk-actions"
 import { locateDevice as locateDeviceRpc } from "@/lib/wails-client"
+import { formatWailsError } from "@/lib/wails-error"
 import type { Device, DeviceActionId } from "@/types/inventory"
 
 type DeviceInventoryState = {
@@ -110,8 +111,7 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         dispatch({
           type: "actionError",
-          message:
-            err instanceof Error ? err.message : "Device action failed",
+          message: formatWailsError(err, "Device action failed"),
         })
         throw err
       } finally {
@@ -145,9 +145,7 @@ export function DeviceInventoryProvider({ children }: { children: ReactNode }) {
             }
           } catch (err) {
             errors.push(
-              err instanceof Error
-                ? `${device.name}: ${err.message}`
-                : `${device.name}: action failed`
+              `${device.name}: ${formatWailsError(err, "action failed")}`
             )
           } finally {
             dispatch({ type: "actionDone", deviceId: device.id })

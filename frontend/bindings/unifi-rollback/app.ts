@@ -114,6 +114,14 @@ export function ListDevices(): $CancellablePromise<inventory$0.Device[]> {
 }
 
 /**
+ * LocateDevice blinks the LEDs on an inventoried device via its console's classic API
+ * using the factory ubnt account.
+ */
+export function LocateDevice(siteID: string, deviceID: string): $CancellablePromise<void> {
+    return $Call.ByID(1891018317, siteID, deviceID);
+}
+
+/**
  * RefreshInventory fetches fleet inventory from Site Manager and persists it to SQLite.
  */
 export function RefreshInventory(): $CancellablePromise<inventory$0.Device[]> {

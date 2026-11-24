@@ -57,7 +57,7 @@ export function getDeviceActionAvailability(
           id: actionId,
           enabled: false,
           reason:
-            "Requires Classic admin credentials for this site — add in Settings",
+            "Requires a Site Manager API key — configure Fleet access in Settings",
         }
       }
       return { id: actionId, enabled: true }

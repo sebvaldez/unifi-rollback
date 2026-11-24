@@ -35,13 +35,27 @@ describe("getDeviceActionAvailability", () => {
     expect(availability.reason).toContain("Home Office")
   })
 
-  it("explains missing locate capability as classic admin requirement", () => {
+  it("explains missing locate capability as site manager requirement", () => {
     const availability = getDeviceActionAvailability(
       { ...onlineDevice, capabilities: EMPTY_DEVICE_CAPABILITIES },
       "locate"
     )
     expect(availability.enabled).toBe(false)
-    expect(availability.reason).toContain("Classic admin")
+    expect(availability.reason).toContain("Site Manager")
+  })
+
+  it("enables locate when capability is present and device is online", () => {
+    const availability = getDeviceActionAvailability(onlineDevice, "locate")
+    expect(availability.enabled).toBe(true)
+  })
+
+  it("disables locate when device is offline", () => {
+    const availability = getDeviceActionAvailability(
+      { ...onlineDevice, status: "offline" },
+      "locate"
+    )
+    expect(availability.enabled).toBe(false)
+    expect(availability.reason).toContain("online")
   })
 
   it("enables restart when capability is present and device is online", () => {
