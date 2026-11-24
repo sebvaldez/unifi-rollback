@@ -18,6 +18,7 @@ export type CredentialCapability =
   | "connector_proxy"
   | "device_read"
   | "device_restart"
+  | "firmware_check"
   | "device_locate"
   | "rollback_ssh"
   | "llm_chat"
@@ -44,6 +45,8 @@ export type ProbedSiteSummary = {
   siteName: string
   hostId?: string
   permission?: string
+  /** Restart and firmware-check rights the connector probe established. */
+  capabilities?: CredentialCapability[]
 }
 
 export type ValidationSummary = {
@@ -94,6 +97,7 @@ export const CREDENTIAL_CAPABILITY_LABELS: Record<CredentialCapability, string> 
     connector_proxy: "Remote console access",
     device_read: "Device details",
     device_restart: "Restart devices",
+    firmware_check: "Firmware checks",
     device_locate: "Locate (LED blink)",
     rollback_ssh: "Firmware rollback",
     llm_chat: "AI assistant",
@@ -101,7 +105,7 @@ export const CREDENTIAL_CAPABILITY_LABELS: Record<CredentialCapability, string> 
 
 export const CREDENTIAL_KIND_LABELS: Record<CredentialSlotKind, string> = {
   site_manager: "Fleet access",
-  network_integration: "Device control",
+  network_integration: "LAN shortcut (optional)",
   classic_admin: "Classic admin (locate)",
   llm_claude: "Claude",
   llm_openai: "OpenAI",

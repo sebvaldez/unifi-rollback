@@ -105,7 +105,7 @@ function CredentialSlotRow({
     (slot.kind === "site_manager"
       ? "Site Manager API · api.ui.com"
       : slot.kind === "network_integration"
-        ? "Network Integration API · per site"
+        ? "Network Integration API · optional, LAN only"
         : CREDENTIAL_KIND_LABELS[slot.kind])
 
   async function handleSave() {
@@ -405,17 +405,18 @@ export function CredentialsRegistry() {
 
               <section className="space-y-3">
                 <h3 className="text-sm font-medium text-[var(--unifi-text)]">
-                  Device control (per site)
+                  LAN shortcut (optional)
                 </h3>
                 <p className="text-xs text-[var(--unifi-text-muted)]">
-                  Network Integration keys bound to each site — required for restart
-                  and firmware verification. Rows appear after your first inventory
-                  refresh discovers sites.
+                  Restart and firmware checks already work through Fleet access. A
+                  per-site Network Integration key is only used when this Mac can
+                  reach the console directly. Rows appear after your first inventory
+                  refresh.
                 </p>
                 {siteSlots.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-[var(--unifi-border)] px-4 py-3 text-sm text-[var(--unifi-text-muted)]">
-                    No site keys yet. Configure fleet access, then refresh inventory
-                    on the Devices tab.
+                    No sites yet. Configure Fleet access, then refresh inventory on
+                    the Devices tab.
                   </p>
                 ) : (
                   <div className="max-h-80 space-y-3 overflow-y-auto pr-1">

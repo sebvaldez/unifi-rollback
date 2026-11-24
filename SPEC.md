@@ -213,8 +213,11 @@ Integration keys inherit the creating admin's role. The app therefore uses a
    (discovered by probing the API on save/revalidate).
 2. **No per-row key picker on Devices** — backend resolves
    `purpose + siteId (+ hostId)` to the correct Keychain item.
-3. **Graceful degradation** — Site Manager alone enables fleet inventory;
-   missing per-site Network keys disable device actions with explicit reasons.
+3. **One required key** — the Site Manager key alone enables fleet inventory,
+   firmware status, and restart (via the Connector Proxy, console UniFi OS
+   5.0.3+ and Network admin rights). A per-site Network Integration key is an
+   optional direct-LAN shortcut and never gates an action. Missing capability
+   disables actions with explicit reasons.
 4. **No fake scope checkboxes** — never ask the user to tick "restart" or
    "inventory"; run validation probes instead.
 
@@ -222,8 +225,8 @@ Integration keys inherit the creating admin's role. The app therefore uses a
 
 | Slot kind | Typical count | Unlocks (when validated) |
 |---|---|---|
-| `site_manager` | 1 (N in v2) | Fleet inventory, Connector Proxy |
-| `network_integration` | 1 per site/host | Device read, restart, rollback verify |
+| `site_manager` | 1 (N in v2) | Fleet inventory, firmware status, restart and rollback verify via Connector Proxy |
+| `network_integration` | 0–1 per site/host (optional) | Direct-LAN shortcut for device read and restart; ignored by the connector |
 | `classic_admin` | 0–1 per console | LED locate (Classic API gap-fill) |
 | `llm_claude` / `llm_openai` | 0–1 each | AI assistant / thread analysis |
 | `device_ssh` | 0–N per MAC | Firmware rollback push |
@@ -249,8 +252,9 @@ Replace the single Site Manager input with a **credential registry**:
 
 - **Fleet access** — Site Manager slot(s): status badge, capability chips,
   Validate / Replace / Remove.
-- **Device control (per site)** — one row per discovered site missing a Network
-  Integration key; inline Add key after first inventory refresh.
+- **LAN shortcut (optional, per site)** — one row per discovered site for a
+  Network Integration key used only when the console is reachable from this Mac;
+  inline Add key after first inventory refresh.
 - **Optional** — Classic admin (locate), LLM keys (collapsed section).
 
 Multi Site Manager keys (v2): list with "Include in fleet view" toggle; merge
@@ -259,10 +263,10 @@ inventories with source label — no per-device key selection.
 #### Devices UI
 
 - Row actions enabled/disabled from **`device.capabilities`**, not raw keys.
-- Tooltip / disabled reason explains missing capability (e.g. "Requires Network
-  API key for Lab site — configure in Settings").
-- Optional banner when inventory is partial: "N sites lack device control keys
-  — [Configure in Settings]".
+- Tooltip / disabled reason explains missing capability (e.g. "Fleet access
+  can't reach the console for Lab — revalidate your Site Manager key").
+- Banner when the Site Manager key is missing or a probe predates connector
+  checks: "Add and validate your Site Manager key" / "Revalidate Fleet access".
 - **Device table toolbar** — search, site/model/status filters, show-hidden
   toggle; site filter persists in `localStorage`.
 - **Bulk select** — checkbox column (list + grid), bulk action bar for locate /
@@ -290,13 +294,17 @@ inventories with source label — no per-device key selection.
 | Surface | Base | Auth | Use |
 |---|---|---|---|
 | Site Manager API | `https://api.ui.com/v1` | `X-API-Key` | Fleet/site inventory, `GET /hosts`, `/sites`, `/devices` |
-| Local Network Integration API | `https://<controller>/proxy/network/integration/v1` | `X-API-Key` | Per-device firmware/version detail, `GET /sites/{id}/devices` |
+| Connector Proxy | `https://api.ui.com/v1/connector/consoles/{consoleId}/proxy/network/integration/v1` | Site Manager `X-API-Key` | Restart (`POST .../devices/{id}/actions`), per-site device detail; `GET /v1/devices` also returns `version`, `firmwareStatus`, `updateAvailable` |
+| Local Network Integration API (optional) | `https://<controller>/proxy/network/integration/v1` | per-site Network `X-API-Key` | Direct-LAN shortcut only; the connector rejects this key |
 
 - [x] Onboarding: user pastes Site Manager key → validate with a live probe
       (`GET /sites`, hosts, devices) → store in Keychain → write
       `credentials_meta` + serialized probe summary.
-- [~] Repeat for local Network API key(s), one per site/controller — placeholder
-      slots sync from probe; per-site save/validate not wired yet.
+- [x] Validation also probes each site through the connector (Network info +
+      site devices, Site Manager key only) to set restart / firmware-check
+      capabilities.
+- [~] Optional local Network API key(s), one per site/controller, direct LAN
+      only — a failed direct probe never clears connector capabilities.
 - [x] Inventory refresh writes into `devices` table. Manual refresh (status
       indicator click) or opt-in polling while the app is open — not unattended
       background scheduling. Preferences: `device_refresh_mode`,
@@ -340,7 +348,8 @@ Rollback execution is therefore handled via SSH (§7), not the API.
 - [ ] Confirmation screen shows: device(s), current version → target version,
       SHA256 of the binary, source link.
 - [ ] Backend SSHes to device, transfers/pushes `.bin`, issues upgrade command.
-- [ ] Poll Network Integration API afterward to confirm reported version
+- [ ] Poll the Network Integration API (connector by default, direct when a
+      LAN key is reachable) afterward to confirm reported version
       actually changed; write `action_log` row either way.
 
 ---
@@ -450,7 +459,7 @@ attaches `.dmg`/`.zip` to a GitHub Release automatically.
 - [x] `secrets/` package — Keychain Save / Get / Delete / ListAccounts / WipeAll (§5.2).
 - [x] Keychain dev tools UI (`wails3 dev` only) + typed destructive confirm dialog.
 - [x] Production onboarding UI: validate Site Manager key → Keychain → `credentials_meta`.
-- [~] Onboarding UI: collect + validate Network key(s), optional Claude/OpenAI keys.
+- [~] Onboarding UI: Site Manager key (required), optional per-site LAN key(s), optional Claude/OpenAI keys.
 - [x] `unifi/` client: Site Manager + Network Integration HTTP clients, key-access
       probe, Connector Proxy helpers.
 - [x] Device inventory screen (list/grid, polling, filters, bulk select, hide rows,

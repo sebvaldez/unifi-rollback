@@ -125,6 +125,11 @@ export class ProbedSiteSummary {
     "hostId"?: string;
     "permission"?: string;
 
+    /**
+     * Capabilities are restart and firmware-check rights the connector probe established.
+     */
+    "capabilities"?: string[];
+
     /** Creates a new ProbedSiteSummary instance. */
     constructor($$source: Partial<ProbedSiteSummary> = {}) {
         if (!("siteId" in $$source)) {

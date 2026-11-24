@@ -39,7 +39,7 @@ function slotSubtitle(slot: CredentialSlot): string {
     case "site_manager":
       return "Site Manager API · api.ui.com"
     case "network_integration":
-      return "Network Integration API · per site"
+      return "Network Integration API · optional, LAN only"
     default:
       return CREDENTIAL_KIND_LABELS[slot.kind]
   }

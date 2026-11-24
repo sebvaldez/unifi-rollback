@@ -13,6 +13,8 @@ type ProbedSite struct {
 	SiteName   string `json:"siteName"`
 	HostID     string `json:"hostId,omitempty"`
 	Permission string `json:"permission,omitempty"`
+	// Capabilities come from the connector probe for this site (Site Manager key only).
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // KeyAccessProbe summarizes what a Site Manager API key can access.
@@ -75,7 +77,50 @@ func (c *SiteManagerClient) ProbeKeyAccess(ctx context.Context, report ...ProbeR
 	probe.DeviceCount = deviceCount
 	probe.ApplicationsObserved = sortedKeys(appSet)
 	probe.Notes = buildProbeNotes(probe, hostsErr)
+
+	connectorNote, err := c.probeConnectorCapabilities(ctx, probe.Sites, reporter)
+	if err != nil {
+		return KeyAccessProbe{}, err
+	}
+	if connectorNote != "" {
+		probe.Notes = append(probe.Notes, connectorNote)
+	}
 	return probe, nil
+}
+
+// probeConnectorCapabilities records restart and firmware-check capabilities per site.
+// A site the connector cannot reach is left without capabilities and does not fail the probe.
+func (c *SiteManagerClient) probeConnectorCapabilities(ctx context.Context, sites []ProbedSite, reporter ProbeReporter) (string, error) {
+	var withHost, reachable int
+	for i := range sites {
+		if sites[i].HostID == "" {
+			continue
+		}
+		withHost++
+		reportProbeStep(reporter, "Checking restart access for "+sites[i].SiteName, c.BaseURL())
+		connector, err := c.ProbeSiteViaConnector(ctx, sites[i].HostID, sites[i].SiteID)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
+		if err != nil {
+			continue
+		}
+		if caps := CapabilitiesFromConnectorProbe(connector); len(caps) > 0 {
+			sites[i].Capabilities = caps
+			reachable++
+		}
+	}
+	switch {
+	case withHost == 0:
+		return "", nil
+	case reachable == withHost:
+		return fmt.Sprintf("Restart and firmware checks available on %d site(s) via the fleet connector", reachable), nil
+	default:
+		return fmt.Sprintf(
+			"Restart and firmware checks available on %d of %d site(s); the connector needs console UniFi OS 5.0.3+ and Network admin rights",
+			reachable, withHost,
+		), nil
+	}
 }
 
 func probeSitesFromAPI(sites []Site) []ProbedSite {
@@ -180,5 +225,10 @@ func CapabilitiesFromProbe(probe KeyAccessProbe) []string {
 	if probe.HostCount > 0 {
 		caps = append(caps, "connector_proxy")
 	}
-	return caps
+	siteCaps := make([][]string, 0, len(probe.Sites)+1)
+	siteCaps = append(siteCaps, caps)
+	for _, site := range probe.Sites {
+		siteCaps = append(siteCaps, site.Capabilities)
+	}
+	return MergeCapabilities(siteCaps...)
 }
