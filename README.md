@@ -82,7 +82,7 @@ Future packages (`ssh`, `llm`, etc.) will live here as well — see SPEC.md §4 
 
 ## Development
 
-**Prerequisites:** Go 1.25+, [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation), Node.js 20+.
+**Prerequisites:** Go 1.27.4 (pinned in `mise.toml`), [Wails v2 CLI](https://wails.io/docs/gettingstarted/installation), Node.js 20+.
 
 ```bash
 # Live reload — Vite dev server + native window
