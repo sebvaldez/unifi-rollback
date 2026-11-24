@@ -22,6 +22,13 @@ import * as settings$0 from "./internal/settings/models.js";
 import * as $models from "./models.js";
 
 /**
+ * ClaudeKeyReady reports whether a Claude API key is saved in Keychain. It never returns the key.
+ */
+export function ClaudeKeyReady(): $CancellablePromise<boolean> {
+    return $Call.ByID(474464309);
+}
+
+/**
  * DatabasePath returns the path to the local SQLite database file.
  */
 export function DatabasePath(): $CancellablePromise<string> {
@@ -120,6 +127,13 @@ export function RefreshInventory(): $CancellablePromise<inventory$0.Device[]> {
  */
 export function RemoveCredential(slotID: string): $CancellablePromise<void> {
     return $Call.ByID(1745722712, slotID);
+}
+
+/**
+ * SaveClaudeKey stores the Claude API key in Keychain.
+ */
+export function SaveClaudeKey(secret: string): $CancellablePromise<void> {
+    return $Call.ByID(3734565425, secret);
 }
 
 /**

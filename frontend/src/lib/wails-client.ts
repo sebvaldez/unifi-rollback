@@ -1,4 +1,5 @@
 import {
+  ClaudeKeyReady,
   DatabasePath,
   DatabaseReady,
   GetDeviceSettings,
@@ -6,6 +7,7 @@ import {
   ListDevices,
   RefreshInventory,
   RemoveCredential,
+  SaveClaudeKey,
   SaveCredential,
   SaveDeviceSettings,
   SyncCredentialSiteSlots,
@@ -33,6 +35,14 @@ export async function fetchDatabasePath(): Promise<string> {
 
 export async function fetchDatabaseReady(): Promise<boolean> {
   return DatabaseReady()
+}
+
+export async function fetchClaudeKeyReady(): Promise<boolean> {
+  return ClaudeKeyReady()
+}
+
+export async function saveClaudeKey(secret: string): Promise<void> {
+  await SaveClaudeKey(secret)
 }
 
 export async function fetchDeviceSettings(): Promise<DeviceSettings> {

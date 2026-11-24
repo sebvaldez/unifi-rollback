@@ -10,7 +10,8 @@ frontend:
   directory: frontend
   install: [npm, install]
   build: [npm, run, build]
-  dev: [npm, run, dev]
+  # The extra arguments stop Wake from running mise's bash npm wrapper under node.
+  dev: [npm, run, dev, --, --host, 127.0.0.1, --strictPort]
   output: frontend/dist
   bindings:
     typescript: true

@@ -45,10 +45,10 @@ function createMessage(role: ChatMessage["role"], content: string): ChatMessage 
 }
 
 async function requestAssistantReply(prompt: string): Promise<string> {
-  // TODO: wire to Wails LLM client on feat branch
+  // TODO: wire to a Wails LLM client; the key is read from Keychain on the Go side
   void prompt
   await new Promise((resolve) => setTimeout(resolve, 650))
-  return "LLM chat is not connected yet. On the AI feature branch you'll be able to ask about firmware safety, community threads, and fleet rollbacks."
+  return "Your Claude API key is saved. Chat is not connected yet, so this is a placeholder reply."
 }
 
 export function useAiChat() {

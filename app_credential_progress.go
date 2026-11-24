@@ -91,18 +91,7 @@ func (t *credentialProgressTracker) emit(phase string) {
 	t.app.emitCredentialProgress(CredentialValidationProgressEvent{
 		SlotID: t.slotID,
 		Phase:  phase,
-		Steps:  append([]CredentialValidationStep(nil), t.steps...),
-	})
-}
-
-func (a *App) clearCredentialProgress(slotID string) {
-	if a == nil {
-		return
-	}
-	a.emitCredentialProgress(CredentialValidationProgressEvent{
-		SlotID: slotID,
-		Phase:  "done",
-		Steps:  nil,
+		Steps:  append([]CredentialValidationStep{}, t.steps...),
 	})
 }
 
