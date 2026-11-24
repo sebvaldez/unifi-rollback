@@ -8,8 +8,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      wailsjs: path.resolve(__dirname, "./wailsjs"),
+      bindings: path.resolve(__dirname, "./bindings"),
     },
+  },
+  server: {
+    port: Number(process.env.WAILS_VITE_PORT) || 5173,
+    strictPort: true,
   },
   test: {
     environment: "jsdom",

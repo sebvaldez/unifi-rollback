@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest"
 import { toDevice, toCredentialSlot } from "@/lib/mappers/inventory"
-import { inventory, main } from "wailsjs/go/models"
+import {
+  Device as WailsDevice,
+  DeviceCapabilities as WailsDeviceCapabilities,
+} from "bindings/unifi-rollback/internal/inventory/models"
+import {
+  CredentialSlot as WailsCredentialSlot,
+  ProbedSiteSummary,
+  ValidationSummary,
+} from "bindings/unifi-rollback/models"
 
 describe("toDevice", () => {
   it("maps scope fields and normalizes unknown status", () => {
-    const model = new inventory.Device({
+    const model = new WailsDevice({
       id: "dev-1",
       siteId: "site-a",
       name: "AP",
@@ -15,7 +23,7 @@ describe("toDevice", () => {
       mac: "aa:bb:cc:dd:ee:01",
       inScope: false,
       scopeLostAt: "2026-08-13T00:00:00Z",
-      capabilities: new inventory.DeviceCapabilities({
+      capabilities: new WailsDeviceCapabilities({
         inventory: true,
         restart: false,
         locate: false,
@@ -31,7 +39,7 @@ describe("toDevice", () => {
   })
 
   it("defaults inScope to true when omitted", () => {
-    const model = new inventory.Device({
+    const model = {
       id: "dev-2",
       siteId: "site-a",
       name: "Switch",
@@ -39,7 +47,7 @@ describe("toDevice", () => {
       firmware: "7.0.0",
       status: "online",
       site: "Home",
-    })
+    } as WailsDevice
 
     expect(toDevice(model).inScope).toBe(true)
   })
@@ -47,7 +55,7 @@ describe("toDevice", () => {
 
 describe("toCredentialSlot", () => {
   it("maps validation summary from Wails model", () => {
-    const model = new main.CredentialSlot({
+    const model = new WailsCredentialSlot({
       id: "site-manager-primary",
       kind: "site_manager",
       label: "Fleet access",
@@ -55,9 +63,9 @@ describe("toCredentialSlot", () => {
       capabilities: ["inventory"],
       enabled: true,
       maskedSuffix: "…abcd",
-      validationSummary: new main.ValidationSummary({
+      validationSummary: new ValidationSummary({
         sites: [
-          new main.ProbedSiteSummary({
+          new ProbedSiteSummary({
             siteId: "site-a",
             siteName: "Home",
           }),

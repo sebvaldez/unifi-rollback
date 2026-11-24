@@ -10,7 +10,7 @@ import {
   SaveDeviceSettings,
   SyncCredentialSiteSlots,
   ValidateCredential,
-} from "wailsjs/go/main/App"
+} from "bindings/unifi-rollback/app"
 import {
   toCredentialSlot,
   toCredentialSlots,
@@ -48,7 +48,7 @@ export async function persistDeviceSettings(
 
 export async function fetchCredentialSlots(): Promise<CredentialSlot[]> {
   const loaded = await ListCredentialSlots()
-  return toCredentialSlots(loaded)
+  return toCredentialSlots(loaded ?? [])
 }
 
 export async function saveCredential(
@@ -71,17 +71,17 @@ export async function syncCredentialSiteSlots(
   sites: { siteId: string; siteName: string }[]
 ): Promise<CredentialSlot[]> {
   const synced = await SyncCredentialSiteSlots(toDiscoveredSites(sites))
-  return toCredentialSlots(synced)
+  return toCredentialSlots(synced ?? [])
 }
 
 export async function refreshInventory(): Promise<Device[]> {
   const loaded = await RefreshInventory()
-  return toDevices(loaded)
+  return toDevices(loaded ?? [])
 }
 
 export async function listDevices(): Promise<Device[]> {
   const loaded = await ListDevices()
-  return toDevices(loaded)
+  return toDevices(loaded ?? [])
 }
 
 /** Blink device LEDs — requires Classic admin or future Integration LOCATE action. */

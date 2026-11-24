@@ -1,4 +1,4 @@
-import { settings as settingsModels } from "wailsjs/go/models"
+import { DeviceSettings as WailsDeviceSettings } from "bindings/unifi-rollback/internal/settings/models"
 import type { DeviceSettings, RefreshMode } from "@/types/settings"
 
 function isRefreshMode(value: string): value is RefreshMode {
@@ -6,7 +6,7 @@ function isRefreshMode(value: string): value is RefreshMode {
 }
 
 export function toDeviceSettings(
-  model: settingsModels.DeviceSettings
+  model: WailsDeviceSettings
 ): DeviceSettings {
   return {
     refreshMode: isRefreshMode(model.refreshMode) ? model.refreshMode : "manual",
@@ -17,6 +17,6 @@ export function toDeviceSettings(
 
 export function toWailsDeviceSettings(
   settings: DeviceSettings
-): settingsModels.DeviceSettings {
-  return settingsModels.DeviceSettings.createFrom(settings)
+): WailsDeviceSettings {
+  return WailsDeviceSettings.createFrom(settings)
 }
