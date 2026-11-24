@@ -40,7 +40,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 | Layer | Choice |
 |---|---|
-| App shell | [Wails v2](https://wails.io) |
+| App shell | [Wails v3](https://v3.wails.io) |
 | Backend | Go |
 | Frontend | Vite + TypeScript + React |
 | Local DB | SQLite (via `mattn/go-sqlite3` or `modernc.org/sqlite` for cgo-free builds) |
@@ -186,10 +186,10 @@ Every item uses `AccessibleWhenUnlockedThisDeviceOnly` and `SynchronizableNo`.
 
 **Dev vs production (Keychain UI):**
 
-- **`wails dev` only:** Settings shows **Keychain dev tools** — add test credentials,
+- **`wails3 dev` only:** Settings shows **Keychain dev tools** — add test credentials,
   list account names, delete one, wipe all. Wails methods `DevKeychain*` are
   guarded by `requireDevMode()` (`runtime.Environment(ctx).BuildType == "dev"`).
-- **`wails build`:** dev panel hidden; `DevKeychain*` calls rejected. Production
+- **`wails3 build`:** dev panel hidden; `DevKeychain*` calls rejected. Production
   credential onboarding (validate → Keychain → `credentials_meta`) is a
   separate follow-up branch.
 - **Do not use `window.confirm` in Wails** — use `TypedConfirmDialog` +
@@ -414,14 +414,14 @@ attaches `.dmg`/`.zip` to a GitHub Release automatically.
       certificate + notarization credentials) — **deferred, see §10**.
 - [ ] Exported `.p12` signing certificate + notarization API key stored as
       GitHub Actions **encrypted secrets** (never committed).
-- [ ] `wails build -platform darwin/arm64` in CI.
+- [ ] `wails3 build` for darwin/arm64 in CI.
 
 ### 11.2 Workflow shape (`.github/workflows/release.yml`)
 
 - [ ] Trigger: `on: push: tags: ['v*']`.
 - [ ] Steps:
   1. Checkout, set up Go + Node.
-  2. `wails build -platform darwin/arm64 -clean`.
+  2. `wails3 build`.
   3. Codesign `.app` with Developer ID Application cert (imported from
      secret).
   4. Notarize via `xcrun notarytool submit --wait`.
@@ -448,7 +448,7 @@ attaches `.dmg`/`.zip` to a GitHub Release automatically.
 - [x] Device refresh preferences (manual / poll, interval, startup) in Settings.
 - [x] GitHub PR template (`.github/pull_request_template.md`).
 - [x] `secrets/` package — Keychain Save / Get / Delete / ListAccounts / WipeAll (§5.2).
-- [x] Keychain dev tools UI (`wails dev` only) + typed destructive confirm dialog.
+- [x] Keychain dev tools UI (`wails3 dev` only) + typed destructive confirm dialog.
 - [x] Production onboarding UI: validate Site Manager key → Keychain → `credentials_meta`.
 - [~] Onboarding UI: collect + validate Network key(s), optional Claude/OpenAI keys.
 - [x] `unifi/` client: Site Manager + Network Integration HTTP clients, key-access
