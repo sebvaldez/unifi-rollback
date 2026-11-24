@@ -3,7 +3,7 @@ import {
   applyCapabilitiesToDevices,
   hasFleetInventoryAccess,
   resolveDeviceCapabilities,
-  sitesMissingDeviceControl,
+  sitesWithoutRestartAccess,
   uniqueSitesFromDevices,
 } from "@/lib/device-capabilities"
 import type { CredentialSlot } from "@/types/credentials"
@@ -28,6 +28,25 @@ const siteManagerConfigured: CredentialSlot = {
   status: "configured",
   capabilities: ["inventory"],
   enabled: true,
+}
+
+const siteManagerWithConnector: CredentialSlot = {
+  ...siteManagerConfigured,
+  capabilities: ["inventory", "connector_proxy", "device_restart", "firmware_check"],
+  validationSummary: {
+    sites: [
+      {
+        siteId: "home",
+        siteName: "Home Office",
+        hostId: "host-1",
+        capabilities: ["device_read", "device_restart", "firmware_check"],
+      },
+      { siteId: "lab", siteName: "Lab", hostId: "host-2" },
+    ],
+    applicationsObserved: ["network"],
+    hostCount: 2,
+    deviceCount: 2,
+  },
 }
 
 const networkConfigured: CredentialSlot = {
@@ -58,6 +77,35 @@ describe("resolveDeviceCapabilities", () => {
     expect(caps.restart).toBe(false)
   })
 
+  it("grants restart from the fleet connector without a per-site key", () => {
+    const caps = resolveDeviceCapabilities(baseDevice, [siteManagerWithConnector])
+    expect(caps.restart).toBe(true)
+  })
+
+  it("withholds restart for a site the connector did not reach", () => {
+    const caps = resolveDeviceCapabilities(
+      { ...baseDevice, siteId: "lab" },
+      [siteManagerWithConnector]
+    )
+    expect(caps.restart).toBe(false)
+  })
+
+  it("keeps connector restart when the LAN key is untested", () => {
+    const caps = resolveDeviceCapabilities(baseDevice, [
+      siteManagerWithConnector,
+      { ...networkConfigured, capabilities: [] },
+    ])
+    expect(caps.restart).toBe(true)
+  })
+
+  it("withholds connector restart when the device is offline", () => {
+    const caps = resolveDeviceCapabilities(
+      { ...baseDevice, status: "offline" },
+      [siteManagerWithConnector]
+    )
+    expect(caps.restart).toBe(false)
+  })
+
   it("grants restart from per-site network integration when online", () => {
     const caps = resolveDeviceCapabilities(baseDevice, [networkConfigured])
     expect(caps.restart).toBe(true)
@@ -84,14 +132,32 @@ describe("resolveDeviceCapabilities", () => {
   })
 })
 
-describe("sitesMissingDeviceControl", () => {
-  it("lists sites without configured network integration keys", () => {
-    const missing = sitesMissingDeviceControl([baseDevice], [siteManagerConfigured])
+describe("sitesWithoutRestartAccess", () => {
+  const labDevice = { ...baseDevice, id: "dev-2", siteId: "lab", site: "Lab" }
+
+  it("lists sites with no connector or LAN restart access", () => {
+    const missing = sitesWithoutRestartAccess([baseDevice], [siteManagerConfigured])
     expect(missing).toEqual([{ siteId: "home", siteName: "Home Office" }])
   })
 
-  it("returns empty when all sites have network keys", () => {
-    const missing = sitesMissingDeviceControl(
+  it("is empty when the connector reaches every site without LAN keys", () => {
+    const missing = sitesWithoutRestartAccess(
+      [baseDevice],
+      [siteManagerWithConnector]
+    )
+    expect(missing).toEqual([])
+  })
+
+  it("lists only the sites the connector did not reach", () => {
+    const missing = sitesWithoutRestartAccess(
+      [baseDevice, labDevice],
+      [siteManagerWithConnector]
+    )
+    expect(missing).toEqual([{ siteId: "lab", siteName: "Lab" }])
+  })
+
+  it("treats a LAN key with restart as access", () => {
+    const missing = sitesWithoutRestartAccess(
       [baseDevice],
       [siteManagerConfigured, networkConfigured]
     )

@@ -19,7 +19,7 @@ export const DEVICE_ACTIONS: DeviceActionDefinition[] = [
   {
     id: "restart",
     label: "Restart",
-    description: "Reboot the device via Network Integration API",
+    description: "Reboot the device through Fleet access (Site Manager key)",
   },
   {
     id: "rollback",
@@ -74,7 +74,7 @@ export function getDeviceActionAvailability(
         return {
           id: actionId,
           enabled: false,
-          reason: `Requires a Network Integration key for ${device.site} — configure in Settings`,
+          reason: `Fleet access can't reach the console for ${device.site} — revalidate your Site Manager key in Settings`,
         }
       }
       return { id: actionId, enabled: true }

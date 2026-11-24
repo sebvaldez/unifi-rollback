@@ -3,8 +3,11 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"slices"
+	"strings"
 	"testing"
 
+	"unifi-rollback/internal/store/sqlc"
 	"unifi-rollback/internal/unifi"
 )
 
@@ -14,8 +17,76 @@ func TestNetworkKeyValidationWarning(t *testing.T) {
 	if w := networkKeyValidationWarning(unifi.NetworkKeyProbe{NetworkKeyVerified: true}); w != "" {
 		t.Fatalf("verified warning = %q, want empty", w)
 	}
-	if w := networkKeyValidationWarning(unifi.NetworkKeyProbe{NetworkKeyVerified: false}); w == "" {
-		t.Fatal("unverified warning should not be empty")
+	w := networkKeyValidationWarning(unifi.NetworkKeyProbe{NetworkKeyVerified: false})
+	if w == "" {
+		t.Fatal("untested warning should not be empty")
+	}
+	for _, banned := range []string{"failed", "invalid", "required"} {
+		if strings.Contains(strings.ToLower(w), banned) {
+			t.Fatalf("untested warning %q must not say %q", w, banned)
+		}
+	}
+}
+
+func TestNetworkSlotFromMeta(t *testing.T) {
+	t.Parallel()
+
+	connector := []string{"device_read", "device_restart", "firmware_check"}
+	untested := encodeNetworkProbeSummary(unifi.UntestedLANProbe())
+	verified := encodeNetworkProbeSummary(unifi.NetworkKeyProbe{NetworkKeyVerified: true})
+	masked := sql.NullString{String: "abcd", Valid: true}
+
+	tests := []struct {
+		name          string
+		row           sqlc.CredentialsMetum
+		connectorCaps []string
+		wantStatus    string
+		wantCaps      []string
+		wantWarning   bool
+	}{
+		{
+			name:          "placeholder row without a key shows no capabilities",
+			row:           sqlc.CredentialsMetum{},
+			connectorCaps: connector,
+			wantStatus:    "unconfigured",
+		},
+		{
+			name:          "LAN key not tested keeps connector capabilities",
+			row:           sqlc.CredentialsMetum{MaskedSuffix: masked, ProbeSummary: untested},
+			connectorCaps: connector,
+			wantStatus:    "configured",
+			wantCaps:      connector,
+			wantWarning:   true,
+		},
+		{
+			name:        "LAN key not tested without connector grants nothing",
+			row:         sqlc.CredentialsMetum{MaskedSuffix: masked, ProbeSummary: untested},
+			wantStatus:  "configured",
+			wantCaps:    []string{},
+			wantWarning: true,
+		},
+		{
+			name:       "verified LAN key grants restart",
+			row:        sqlc.CredentialsMetum{MaskedSuffix: masked, ProbeSummary: verified},
+			wantStatus: "configured",
+			wantCaps:   []string{"device_read", "device_restart"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			slot := networkSlotFromMeta("default", tc.row, tc.connectorCaps)
+			if slot.Status != tc.wantStatus {
+				t.Fatalf("Status = %q, want %q", slot.Status, tc.wantStatus)
+			}
+			if !slices.Equal(slot.Capabilities, tc.wantCaps) {
+				t.Fatalf("Capabilities = %v, want %v", slot.Capabilities, tc.wantCaps)
+			}
+			if (slot.ValidationError != "") != tc.wantWarning {
+				t.Fatalf("ValidationError = %q, wantWarning %v", slot.ValidationError, tc.wantWarning)
+			}
+		})
 	}
 }
 

@@ -17,6 +17,12 @@ export function resolveDeviceCapabilities(
     caps.inventory = siteManager.capabilities.includes("inventory")
   }
 
+  // Restart comes from the fleet connector probe (Site Manager key only). The
+  // optional per-site LAN key can add it but never removes it.
+  const connectorRestart =
+    siteManager?.validationSummary?.sites
+      .find((site) => site.siteId === device.siteId)
+      ?.capabilities?.includes("device_restart") ?? false
   const network = slots.find(
     (s) =>
       s.kind === "network_integration" &&
@@ -24,8 +30,9 @@ export function resolveDeviceCapabilities(
       s.status === "configured" &&
       s.boundSiteId === device.siteId
   )
-  if (network && online) {
-    caps.restart = network.capabilities.includes("device_restart")
+  const lanRestart = network?.capabilities.includes("device_restart") ?? false
+  if (online) {
+    caps.restart = connectorRestart || lanRestart
   }
 
   const classic = slots.find(
@@ -74,21 +81,18 @@ export function uniqueSitesFromDevices(
   }))
 }
 
-/** Sites that appear in inventory but lack a configured Network Integration key. */
-export function sitesMissingDeviceControl(
+/** Sites in inventory where neither the fleet connector nor a LAN key grants restart. */
+export function sitesWithoutRestartAccess(
   devices: Device[],
   slots: CredentialSlot[]
 ): { siteId: string; siteName: string }[] {
   const missing: { siteId: string; siteName: string }[] = []
   for (const [siteId, siteName] of sitesFromDevices(devices)) {
-    const hasNetwork = slots.some(
-      (s) =>
-        s.kind === "network_integration" &&
-        s.enabled &&
-        s.status === "configured" &&
-        s.boundSiteId === siteId
+    const { restart } = resolveDeviceCapabilities(
+      { siteId, status: "online" },
+      slots
     )
-    if (!hasNetwork) {
+    if (!restart) {
       missing.push({ siteId, siteName })
     }
   }

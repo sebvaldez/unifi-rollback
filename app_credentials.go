@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,9 @@ import (
 	"unifi-rollback/internal/store/sqlc"
 	"unifi-rollback/internal/unifi"
 )
+
+// lanReachabilityTimeout bounds the check that decides whether a per-site LAN key is usable.
+const lanReachabilityTimeout = 3 * time.Second
 
 const (
 	slotSiteManagerPrimary = "site-manager-primary"
@@ -36,6 +40,8 @@ type ProbedSiteSummary struct {
 	SiteName   string `json:"siteName"`
 	HostID     string `json:"hostId,omitempty"`
 	Permission string `json:"permission,omitempty"`
+	// Capabilities are restart and firmware-check rights the connector probe established.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // CredentialSlot mirrors frontend/src/types/credentials.ts CredentialSlot.
@@ -497,12 +503,18 @@ func (a *App) saveNetworkIntegrationCredential(siteID string, request SaveCreden
 		return CredentialSlot{}, saveErr
 	}
 
+	connectorCaps, err := a.connectorCapabilitiesForSite(siteID)
+	if err != nil {
+		saveErr = err
+		return CredentialSlot{}, saveErr
+	}
+
 	return CredentialSlot{
 		ID:              networkSlotID(siteID),
 		Kind:            "network_integration",
 		Label:           label,
 		Status:          "configured",
-		Capabilities:    unifi.CapabilitiesFromNetworkProbe(probe),
+		Capabilities:    unifi.SiteCapabilities(connectorCaps, probe),
 		Enabled:         true,
 		BoundSiteID:     siteID,
 		BoundSiteName:   label,
@@ -567,8 +579,14 @@ func (a *App) validateNetworkIntegrationCredential(siteID string) (CredentialSlo
 		return CredentialSlot{}, validateErr
 	}
 
+	connectorCaps, err := a.connectorCapabilitiesForSite(siteID)
+	if err != nil {
+		validateErr = err
+		return CredentialSlot{}, validateErr
+	}
+
 	slot.Status = "configured"
-	slot.Capabilities = unifi.CapabilitiesFromNetworkProbe(probe)
+	slot.Capabilities = unifi.SiteCapabilities(connectorCaps, probe)
 	slot.MaskedSuffix = secrets.MaskedSuffix(secret)
 	slot.LastValidatedAt = now.Format(time.RFC3339)
 	slot.ValidationError = networkKeyValidationWarning(probe)
@@ -576,31 +594,51 @@ func (a *App) validateNetworkIntegrationCredential(siteID string) (CredentialSlo
 	return slot, nil
 }
 
-func (a *App) networkClientForSite(siteID, networkKey string) (*unifi.NetworkClient, string, error) {
+// networkClientForSite is the one resolver for device actions and firmware checks.
+// It routes through the Site Manager connector for the site's console. A per-site LAN key
+// is used only when it is stored and the console answers directly from this Mac.
+func (a *App) networkClientForSite(siteID string) (*unifi.NetworkClient, error) {
+	sm, err := a.siteManagerClient()
+	if err != nil {
+		return nil, fmt.Errorf("add your Site Manager API key in Settings: %w", err)
+	}
 	hostID, err := a.resolveHostIDForSite(siteID)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if hostID == "" {
-		if _, smErr := a.siteManagerClient(); smErr != nil {
-			return nil, "", fmt.Errorf("configure fleet access before adding network keys: %w", smErr)
-		}
-		return nil, "", fmt.Errorf("no console found for site %q", siteID)
+		return nil, fmt.Errorf("no console found for site %q", siteID)
 	}
-
-	if networkKey != "" {
-		if consoleURL, urlErr := a.consoleURLForHost(hostID); urlErr == nil {
-			return unifi.NewNetworkClientForLocalConsole(consoleURL, networkKey), hostID, nil
-		}
-	}
-
-	sm, smErr := a.siteManagerClient()
-	if smErr == nil {
-		return unifi.NewNetworkClientViaConnector(sm, hostID), hostID, nil
-	}
-	return nil, "", fmt.Errorf("configure fleet access before adding network keys: %w", smErr)
+	return unifi.ResolveNetworkClient(sm, hostID, a.reachableLANClient(siteID, hostID)), nil
 }
 
+// reachableLANClient returns a direct client only when a per-site key is stored and the
+// console answers on the LAN. Any miss returns nil so the caller falls back to the connector.
+func (a *App) reachableLANClient(siteID, hostID string) *unifi.NetworkClient {
+	store, err := a.secretsStore()
+	if err != nil {
+		return nil
+	}
+	key, err := store.Get(secrets.NetworkLocalAPIKeyAccount(siteID))
+	if err != nil || key == "" {
+		return nil
+	}
+	consoleURL, err := a.consoleURLForHost(hostID)
+	if err != nil {
+		return nil
+	}
+
+	client := unifi.NewNetworkClientForLocalConsole(consoleURL, key)
+	ctx, cancel := context.WithTimeout(a.ctx, lanReachabilityTimeout)
+	defer cancel()
+	if _, err := client.Info(ctx); err != nil {
+		return nil
+	}
+	return client
+}
+
+// probeNetworkIntegrationKey tests an optional per-site key directly against the console.
+// It never routes through the connector, which would send the Site Manager key instead.
 func (a *App) probeNetworkIntegrationKey(siteID, networkKey string, tracker *credentialProgressTracker) (unifi.NetworkKeyProbe, string, error) {
 	if tracker != nil {
 		tracker.step("Looking up console for site", siteID)
@@ -610,72 +648,31 @@ func (a *App) probeNetworkIntegrationKey(siteID, networkKey string, tracker *cre
 		return unifi.NetworkKeyProbe{}, "", err
 	}
 	if hostID == "" {
-		return unifi.NetworkKeyProbe{}, "", fmt.Errorf("no console found for site %q", siteID)
+		return unifi.NetworkKeyProbe{}, "", fmt.Errorf("no console found for site %q; add and validate your Site Manager key first", siteID)
 	}
 
-	var directErr error
-	if consoleURL, urlErr := a.consoleURLForHost(hostID); urlErr == nil {
+	consoleURL, err := a.consoleURLForHost(hostID)
+	if err != nil {
 		if tracker != nil {
-			tracker.step("Trying direct console access", consoleURL)
+			tracker.skip("Direct console access unavailable", err.Error())
 		}
-		client := unifi.NewNetworkClientForLocalConsole(consoleURL, networkKey)
-		reporter := unifi.ProbeReporter(nil)
-		if tracker != nil {
-			reporter = tracker.probeReporter()
-		}
-		probe, err := client.ProbeKeyAccess(a.ctx, siteID, reporter)
-		if err == nil {
-			probe.NetworkKeyVerified = true
-			probe.Notes = append(probe.Notes, "Validated network key via direct console access")
-			return probe, hostID, nil
-		}
-		directErr = err
-		if unifi.IsHTTPStatus(err, http.StatusUnauthorized) {
-			return unifi.NetworkKeyProbe{}, "", fmt.Errorf("network integration validation failed: invalid API key (HTTP 401)")
-		}
-		if tracker != nil {
-			tracker.skip("Direct console access unavailable", consoleURL)
-		}
-	} else {
-		directErr = urlErr
-		if tracker != nil {
-			tracker.skip("Direct console access unavailable", urlErr.Error())
-		}
-	}
-
-	sm, smErr := a.siteManagerClient()
-	if smErr != nil {
-		if directErr != nil {
-			return unifi.NetworkKeyProbe{}, "", fmt.Errorf("network integration validation failed: %w", directErr)
-		}
-		return unifi.NetworkKeyProbe{}, "", fmt.Errorf("configure fleet access before adding network keys: %w", smErr)
+		return unifi.UntestedLANProbe(), hostID, nil
 	}
 
 	if tracker != nil {
-		tracker.step("Connecting via fleet connector", "api.ui.com")
+		tracker.step("Trying direct console access", consoleURL)
 	}
-	client := unifi.NewNetworkClientViaConnector(sm, hostID)
 	reporter := unifi.ProbeReporter(nil)
 	if tracker != nil {
 		reporter = tracker.probeReporter()
 	}
-	probe, connErr := client.ProbeKeyAccess(a.ctx, siteID, reporter)
-	if connErr != nil {
-		if directErr != nil {
-			return unifi.NetworkKeyProbe{}, "", fmt.Errorf(
-				"network integration validation failed: direct: %v; connector: %w",
-				directErr,
-				connErr,
-			)
-		}
-		return unifi.NetworkKeyProbe{}, "", fmt.Errorf("network integration validation failed: %w", connErr)
+	client := unifi.NewNetworkClientForLocalConsole(consoleURL, networkKey)
+	probe, probeErr := client.ProbeKeyAccess(a.ctx, siteID, reporter)
+	if probeErr != nil && !unifi.IsHTTPStatus(probeErr, http.StatusUnauthorized) && tracker != nil {
+		tracker.skip("Direct console access unavailable", consoleURL)
 	}
-
-	probe.Notes = append(probe.Notes,
-		"Site reachable via fleet connector; network key not verified directly (console unreachable from this Mac)",
-	)
-	probe.NetworkKeyVerified = false
-	return probe, hostID, nil
+	probe, err = unifi.ClassifyLANProbe(probe, probeErr)
+	return probe, hostID, err
 }
 
 func (a *App) resolveHostIDForSite(siteID string) (string, error) {
@@ -802,13 +799,53 @@ func (a *App) loadNetworkIntegrationSlot(siteID string) (CredentialSlot, error) 
 	if err != nil {
 		return CredentialSlot{}, fmt.Errorf("load network integration metadata for site %q: %w", siteID, err)
 	}
-	return networkSlotFromMeta(siteID, meta), nil
+	connectorCaps, err := a.connectorCapabilitiesForSite(siteID)
+	if err != nil {
+		return CredentialSlot{}, err
+	}
+	return networkSlotFromMeta(siteID, meta, connectorCaps), nil
+}
+
+// connectorCapabilitiesForSite returns what the last Site Manager probe established for one site.
+func (a *App) connectorCapabilitiesForSite(siteID string) ([]string, error) {
+	bySite, err := a.connectorCapabilitiesBySite()
+	if err != nil {
+		return nil, err
+	}
+	return bySite[siteID], nil
+}
+
+func (a *App) connectorCapabilitiesBySite() (map[string][]string, error) {
+	bySite := make(map[string][]string)
+	meta, err := a.store.Queries().GetCredentialMeta(a.ctx, keyTypeSiteManager)
+	if errors.Is(err, sql.ErrNoRows) {
+		return bySite, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load site manager metadata: %w", err)
+	}
+	summary, err := decodeProbeSummary(meta.ProbeSummary)
+	if err != nil {
+		return nil, err
+	}
+	if summary == nil {
+		return bySite, nil
+	}
+	for _, site := range summary.Sites {
+		bySite[site.SiteID] = site.Capabilities
+	}
+	return bySite, nil
 }
 
 func (a *App) loadNetworkIntegrationSlots() ([]CredentialSlot, error) {
 	rows, err := a.store.Queries().ListCredentialsMeta(a.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list credential metadata: %w", err)
+	}
+
+	connectorCaps, err := a.connectorCapabilitiesBySite()
+	if err != nil {
+		return nil, err
 	}
 
 	bySiteID := make(map[string]CredentialSlot)
@@ -823,7 +860,7 @@ func (a *App) loadNetworkIntegrationSlots() ([]CredentialSlot, error) {
 			continue
 		}
 
-		slot := networkSlotFromMeta(siteID, row)
+		slot := networkSlotFromMeta(siteID, row, connectorCaps[siteID])
 		existing, ok := bySiteID[siteID]
 		if !ok || networkSlotRank(slot) > networkSlotRank(existing) {
 			bySiteID[siteID] = slot
@@ -838,7 +875,9 @@ func (a *App) loadNetworkIntegrationSlots() ([]CredentialSlot, error) {
 	return slots, nil
 }
 
-func networkSlotFromMeta(siteID string, row sqlc.CredentialsMetum) CredentialSlot {
+// networkSlotFromMeta builds the optional LAN-key row. Capabilities appear only once a key is
+// stored, and a failed or untested LAN probe never removes what the connector established.
+func networkSlotFromMeta(siteID string, row sqlc.CredentialsMetum, connectorCaps []string) CredentialSlot {
 	label := siteID
 	if row.Label.Valid && row.Label.String != "" {
 		label = row.Label.String
@@ -858,14 +897,12 @@ func networkSlotFromMeta(siteID string, row sqlc.CredentialsMetum) CredentialSlo
 	if row.MaskedSuffix.Valid && row.MaskedSuffix.String != "" {
 		slot.Status = "configured"
 		slot.MaskedSuffix = row.MaskedSuffix.String
+		lan := unifi.NetworkKeyProbe{}
 		if probe, err := decodeNetworkProbeSummary(row.ProbeSummary); err == nil && probe != nil {
-			slot.Capabilities = unifi.CapabilitiesFromNetworkProbe(*probe)
-			if w := networkKeyValidationWarning(*probe); w != "" {
-				slot.ValidationError = w
-			}
-		} else {
-			slot.Capabilities = []string{"device_read", "device_restart"}
+			lan = *probe
+			slot.ValidationError = networkKeyValidationWarning(lan)
 		}
+		slot.Capabilities = unifi.SiteCapabilities(connectorCaps, lan)
 	}
 
 	if row.LastValidatedAt.Valid {
@@ -959,7 +996,7 @@ func networkKeyValidationWarning(probe unifi.NetworkKeyProbe) string {
 	if probe.NetworkKeyVerified {
 		return ""
 	}
-	return "Network key stored but not verified directly. Revalidate on the same LAN as your console to enable device actions."
+	return "Saved but not tested: this Mac could not reach the console directly. Restart and firmware checks use Fleet access, so this key is optional."
 }
 
 func rollbackKeychainSecret(store *secrets.Store, account, previousSecret string, hadPrevious bool) {
@@ -1003,10 +1040,11 @@ func validationSummaryFromProbe(probe unifi.KeyAccessProbe) ValidationSummary {
 	sites := make([]ProbedSiteSummary, len(probe.Sites))
 	for i, site := range probe.Sites {
 		sites[i] = ProbedSiteSummary{
-			SiteID:     site.SiteID,
-			SiteName:   site.SiteName,
-			HostID:     site.HostID,
-			Permission: site.Permission,
+			SiteID:       site.SiteID,
+			SiteName:     site.SiteName,
+			HostID:       site.HostID,
+			Permission:   site.Permission,
+			Capabilities: site.Capabilities,
 		}
 	}
 	return ValidationSummary{
@@ -1022,10 +1060,11 @@ func probeFromSummary(summary ValidationSummary) unifi.KeyAccessProbe {
 	sites := make([]unifi.ProbedSite, len(summary.Sites))
 	for i, site := range summary.Sites {
 		sites[i] = unifi.ProbedSite{
-			SiteID:     site.SiteID,
-			SiteName:   site.SiteName,
-			HostID:     site.HostID,
-			Permission: site.Permission,
+			SiteID:       site.SiteID,
+			SiteName:     site.SiteName,
+			HostID:       site.HostID,
+			Permission:   site.Permission,
+			Capabilities: site.Capabilities,
 		}
 	}
 	return unifi.KeyAccessProbe{

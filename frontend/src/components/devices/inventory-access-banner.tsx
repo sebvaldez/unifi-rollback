@@ -3,7 +3,7 @@ import { useCredentials } from "@/context/credentials-context"
 import { useDeviceInventory } from "@/context/device-inventory-context"
 import {
   hasFleetInventoryAccess,
-  sitesMissingDeviceControl,
+  sitesWithoutRestartAccess,
 } from "@/lib/device-capabilities"
 import { AlertTriangle, Settings } from "lucide-react"
 
@@ -22,7 +22,7 @@ export function InventoryAccessBanner({
   }
 
   const fleetReady = hasFleetInventoryAccess(slots)
-  const missingSites = sitesMissingDeviceControl(devices, slots)
+  const missingSites = sitesWithoutRestartAccess(devices, slots)
 
   if (fleetReady && missingSites.length === 0) {
     return null
@@ -31,12 +31,10 @@ export function InventoryAccessBanner({
   let message: string
   if (!fleetReady) {
     message =
-      "Fleet inventory is limited — add and validate your Site Manager key in Settings → Credentials."
-  } else if (missingSites.length === 1) {
-    message = `Restart actions need a Network Integration key for ${missingSites[0].siteName}. Add it in Settings → Credentials.`
+      "Add and validate your Site Manager key in Settings → Credentials to load inventory and enable restart and firmware checks."
   } else {
     const names = missingSites.map((site) => site.siteName).join(", ")
-    message = `Network Integration keys are missing for ${names}. Restart actions stay disabled until keys are configured.`
+    message = `Restart is unavailable for ${names}. Revalidate Fleet access in Settings → Credentials. The console needs UniFi OS 5.0.3+ and Network admin rights.`
   }
 
   return (
