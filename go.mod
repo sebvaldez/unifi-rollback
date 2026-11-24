@@ -1,6 +1,6 @@
 module unifi-rollback
 
-go 1.25.7
+go 1.27.4
 
 require (
 	github.com/keybase/go-keychain v0.0.1
